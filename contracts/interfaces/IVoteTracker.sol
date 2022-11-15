@@ -89,6 +89,7 @@ interface IVoteTracker is IEventReceiver {
     event VoteMultipliersSet(VoteTokenMultipler[] multipliers);
     event ProxyRateLimitSet(uint256 voteEveryBlockLimit);
     event SigningChainIdSet(uint256 chainId);
+    event DelegatorUpdate(address from, bool isDelegator);
 
     /// @notice Get the current nonce an account should use to vote with
     /// @param account Account to query

@@ -19,6 +19,9 @@ interface ILiquidityPool {
     event WithdrawalRequested(address requestor, uint256 amount);
     event DepositsPaused();
     event DepositsUnpaused();
+    event BurnerRegistered(address burner, bool allowed);
+    event Burned(address indexed account, address indexed burner, uint256 amount);
+    event RebalancerSet(address rebalancer);
 
     /// @notice Transfers amount of underlying token from user to this pool and mints fToken to the msg.sender.
     /// @notice Depositor must have previously granted transfer approval to the pool via underlying token contract.
@@ -36,6 +39,10 @@ interface ILiquidityPool {
     function requestWithdrawal(uint256 amount) external;
 
     function approveManager(uint256 amount) external;
+
+    /// @notice Approves rebalancer contract to withdraw pool tokens
+    /// @param amount Number of pool tokens to be approved
+    function approveRebalancer(uint256 amount) external;
 
     /// @notice Sender must first invoke requestWithdrawal in a previous cycle
     /// @notice This function will burn the fAsset and transfers underlying asset back to sender
@@ -65,4 +72,22 @@ interface ILiquidityPool {
 
     // @notice Unpause deposits only on the pool.
     function unpauseDeposit() external;
+
+    ///@notice Registers address that is allowed or not allowed to burn 
+    ///@dev Address registered as 'true' will be able to burn tAssets in its possession or that it has an allowance to
+    ///@param burner Address that will be able / not able to burn tAssets
+    ///@param allowedBurner Boolean that will register burner address as able to burn or not
+    function registerBurner(address burner, bool allowedBurner) external;
+
+    /// @notice Used to set rebalancer address
+    /// @dev Purpose is to set rebalancer on proxy state
+    /// @param rebalancer address of rebalancer
+    function setRebalancer(address rebalancer) external;
+
+    ///@notice Function allows address to burn tAssets in its posession
+    ///@dev Address can burn all tAssets in its posession
+    ///@dev Overages are prevented by interited functionality from _burn()
+    ///@param amount Amount of tAsset to be burned
+    ///@param account Address to be burned from
+    function controlledBurn(uint256 amount, address account) external;
 }

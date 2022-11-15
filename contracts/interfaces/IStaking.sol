@@ -43,6 +43,7 @@ interface IStaking {
         uint256 scheduleIdxTo;
         uint256 amount;
         address to;
+        uint256 minCycle;
     }
 
     event ScheduleAdded(
@@ -64,6 +65,7 @@ interface IStaking {
     event UserSchedulesSet(address account, uint256[] userSchedulesIdxs);
     event NotionalAddressesSet(uint256[] scheduleIdxs, address[] addresses);
     event ScheduleStatusSet(uint256 scheduleId, bool isActive);
+    event ScheduleHardStartSet(uint256 scheduleId, uint256 hardStart);
     event StakeTransferred(
         address from,
         uint256 scheduleFrom,
@@ -78,22 +80,39 @@ interface IStaking {
         uint256 scheduleFrom,
         uint256 scheduleTo,
         uint256 amount,
-        address to
+        address to,
+        uint256 minCycle
     );
     event QueuedTransferRemoved(
         address from,
         uint256 scheduleFrom,
         uint256 scheduleTo,
         uint256 amount,
-        address to
+        address to,
+        uint256 minCycle
     );
     event QueuedTransferRejected(
         address from,
         uint256 scheduleFrom,
         uint256 scheduleTo,
         uint256 amount,
-        address to
+        address to,
+        uint256 minCycle,
+        address rejectedBy
     );
+
+    /// @notice Get a queued higher level schedule transfers
+    /// @param fromAddress Account that initiated the transfer
+    /// @param fromScheduleId Schedule they are transferring out of
+    /// @return Details about the transfer
+    function getQueuedTransfer(address fromAddress, uint256 fromScheduleId)
+        external
+        view
+        returns (QueuedTransfer memory);
+
+    /// @notice Get the current transfer approver
+    /// @return Transfer approver address
+    function transferApprover() external returns (address);
 
     ///@notice Allows for checking of user address in permissionedDepositors mapping
     ///@param account Address of account being checked
@@ -168,18 +187,6 @@ interface IStaking {
         uint256 scheduleIndex
     ) external;
 
-    ///@notice Allows permissioned depositors to deposit into custom schedule
-    ///@param account Address of account being deposited for
-    ///@param amount Uint256 amount being deposited
-    ///@param schedule StakingSchedule struct containing details needed for new schedule
-    ///@param notional Notional address attached to schedule, allows for different voting weights on L2
-    function depositWithSchedule(
-        address account,
-        uint256 amount,
-        StakingSchedule calldata schedule,
-        address notional
-    ) external;
-
     ///@notice User can request withdrawal from staking contract at end of cycle
     ///@notice Performs checks to make sure amount <= amount available
     ///@param amount Amount to withdraw
@@ -195,6 +202,16 @@ interface IStaking {
     /// @param scheduleIndex Schedule index to set isActive boolean
     /// @param activeBoolean Bool to set schedule active or not
     function setScheduleStatus(uint256 scheduleIndex, bool activeBoolean) external;
+
+    /// @notice Allows owner to update schedule hard start
+    /// @param scheduleIdx Schedule index to update
+    /// @param hardStart new hardStart value
+    function setScheduleHardStart(uint256 scheduleIdx, uint256 hardStart) external;
+
+    /// @notice Allows owner to update users schedules start
+    /// @param accounts Accounts to update
+    /// @param scheduleIdx Schedule index to update
+    function updateScheduleStart(address[] calldata accounts, uint256 scheduleIdx) external;
 
     /// @notice Pause deposits on the pool. Withdraws still allowed
     function pause() external;
@@ -215,12 +232,57 @@ interface IStaking {
         uint256 scheduleIndex
     ) external;
 
+    /// @notice Allows user to transfer stake to another address
+    /// @param scheduleFrom, schedule stake being transferred from
+    /// @param scheduleTo, schedule stake being transferred to
+    /// @param amount, Amount to be transferred to new address and schedule
+    /// @param to, Address to be transferred to
+    function queueTransfer(
+        uint256 scheduleFrom,
+        uint256 scheduleTo,
+        uint256 amount,
+        address to
+    ) external;
+
+    /// @notice Allows user to remove queued transfer
+    /// @param scheduleIdxFrom scheduleIdx being transferred from
+    function removeQueuedTransfer(uint256 scheduleIdxFrom) external;
+
     /// @notice Set the address used to denote the token amount for a particular schedule
     /// @dev Relates to the Balance Tracker tracking of tokens and balances. Each schedule is tracked separately
     function setNotionalAddresses(uint256[] calldata scheduleIdxArr, address[] calldata addresses)
         external;
 
+    /// @notice For tokens in higher level schedules, move vested amounts to the default schedule
+    /// @notice Allows for full voting weight to be applied when tokens have vested
+    /// @param scheduleIdx Schedule to sweep tokens from
+    /// @param amount Amount to sweep to default schedule
+    function sweepToScheduleZero(uint256 scheduleIdx, uint256 amount) external;
+
+    /// @notice Set the approver for higher schedule transfers
+    /// @param approver New transfer approver
+    function setTransferApprover(address approver) external;
+
     /// @notice Withdraw from the default schedule. Must have a request in previously
     /// @param amount Amount to withdraw
     function withdraw(uint256 amount) external;
+
+    /// @notice Allows transfeApprover to reject a submitted transfer
+    /// @param from address queued transfer is from
+    /// @param scheduleIdxFrom Schedule index of queued transfer
+    function rejectQueuedTransfer(address from, uint256 scheduleIdxFrom) external;
+
+    /// @notice Approve a queued transfer from a higher level schedule
+    /// @param from address that queued the transfer
+    /// @param scheduleIdxFrom Schedule index of queued transfer
+    /// @param scheduleIdxTo Schedule index of destination
+    /// @param amount Amount being transferred
+    /// @param to Destination account
+    function approveQueuedTransfer(
+        address from,
+        uint256 scheduleIdxFrom,
+        uint256 scheduleIdxTo,
+        uint256 amount,
+        address to
+    ) external;
 }

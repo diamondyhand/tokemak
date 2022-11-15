@@ -5,6 +5,8 @@
   "scripts": {
     "coverage": "npx hardhat coverage",
     "test": "npx hardhat test",
+    "test:unit": "globstar -- hardhat test test-unit/*.test.*",
+    "test:integration": "globstar -- hardhat test 'test-integration/**/*.test.*'",
     "prettier:solidity": "npx prettier --write contracts/**/*.sol"
   },
   "repository": {
@@ -20,8 +22,13 @@
       "pre-push": "npm run prettier:solidity"
     }
   },
+  "files": [
+    "abis",
+    "artifacts",
+    "contracts"
+  ],
   "devDependencies": {
-    "@nomiclabs/hardhat-waffle": "^2.0.1",
+    "@nomiclabs/hardhat-waffle": "^2.0.3",
     "@typechain/ethers-v5": "^7.0.1",
     "@types/chai": "^4.2.21",
     "@types/mocha": "^9.0.0",
@@ -29,7 +36,6 @@
     "chai": "^4.3.4",
     "ethereum-waffle": "^3.4.0",
     "ethers": "^5.4.4",
-    "hardhat": "^2.6.0",
     "hardhat-contract-sizer": "^2.0.3",
     "hardhat-deploy": "^0.8.11",
     "hardhat-gas-reporter": "^1.0.4",
@@ -43,9 +49,28 @@
     "typescript": "^4.3.5"
   },
   "dependencies": {
-    "@nomiclabs/hardhat-ethers": "^2.1.1",
-    "@openzeppelin/contracts": "^4.4.0",
+    "@0x/contracts-erc20": "^3.3.13",
+    "@0x/contracts-utils": "^4.7.13",
+    "@0x/contracts-zero-ex": "^0.38.0",
+    "@airswap/merkle": "^0.0.3",
+    "@balancer-labs/balancer-js": "^1.0.1",
+    "@balancer-labs/v2-vault": "^2.0.0",
+    "@chainlink/contracts": "^0.5.1",
+    "@nomiclabs/hardhat-ethers": "^2.2.1",
+    "@nomiclabs/hardhat-etherscan": "^3.1.2",
+    "@nomiclabs/hardhat-truffle5": "^2.0.7",
+    "@openzeppelin/contracts": "^3.4.1",
+    "@openzeppelin/contracts-upgradeable": "^3.4.1",
+    "@openzeppelin/hardhat-upgrades": "^1.21.0",
+    "@openzeppelin/test-helpers": "^0.5.16",
+    "@sushiswap/core": "^1.4.2",
     "@typechain/hardhat": "^2.3.0",
+    "@uniswap/v2-core": "^1.0.1",
+    "@uniswap/v2-periphery": "^1.1.0-beta.0",
+    "eth-sig-util": "^3.0.1",
+    "ganache-time-traveler": "^1.0.16",
+    "globstar": "^1.0.0",
+    "hardhat": "^2.2.1",
     "solhint": "^3.3.6",
     "ts-generator": "^0.1.1"
   }

@@ -152,9 +152,9 @@ contract DefiRound is IDefiRound, Ownable {
         onlyOwner
     {
         uint256 tokensLength = tokensToSupport.length;
-        for (uint256 i = 0; i < tokensLength; i++) {
+        for (uint256 i = 0; i < tokensLength; ++i) {
             SupportedTokenData memory data = tokensToSupport[i];
-            require(supportedTokens.add(data.token), "TOKEN_EXISTS");
+            require(supportedTokens.add(data.token), "ADD_FAIL");
             
             tokenSettings[data.token] = data;
         }
@@ -164,7 +164,7 @@ contract DefiRound is IDefiRound, Ownable {
     function getSupportedTokens() external view override returns (address[] memory tokens) {
         uint256 tokensLength = supportedTokens.length();
         tokens = new address[](tokensLength);
-        for (uint256 i = 0; i < tokensLength; i++) {
+        for (uint256 i = 0; i < tokensLength; ++i) {
             tokens[i] = supportedTokens.at(i);
         }
     }
@@ -177,12 +177,12 @@ contract DefiRound is IDefiRound, Ownable {
         require(oversubRate.overNumerator > 0, "INVALID_NUMERATOR");        
         
         uint256 ratesLength = ratesData.length;
-        for (uint256 i = 0; i < ratesLength; i++) {
+        for (uint256 i = 0; i < ratesLength; ++i) {
             RateData memory data = ratesData[i];
             require(data.numerator > 0, "INVALID_NUMERATOR");
             require(data.denominator > 0, "INVALID_DENOMINATOR");
             require(tokenRates[data.token].token == address(0), "RATE_ALREADY_SET");
-            require(configuredTokenRates.add(data.token), "ALREADY_CONFIGURED");
+            require(configuredTokenRates.add(data.token), "ADD_FAIL");
             tokenRates[data.token] = data;            
         }
 
@@ -199,7 +199,7 @@ contract DefiRound is IDefiRound, Ownable {
     function getRates(address[] calldata tokens) external view override returns (RateData[] memory rates) {
         uint256 tokensLength = tokens.length;
         rates = new RateData[](tokensLength);
-        for (uint256 i = 0; i < tokensLength; i++) {
+        for (uint256 i = 0; i < tokensLength; ++i) {
             rates[i] = tokenRates[tokens[i]];
         }
     }
@@ -217,7 +217,7 @@ contract DefiRound is IDefiRound, Ownable {
 
     function _totalValue() internal view returns (uint256 value) {
         uint256 tokensLength = supportedTokens.length();
-        for (uint256 i = 0; i < tokensLength; i++) {
+        for (uint256 i = 0; i < tokensLength; ++i) {
             address token = supportedTokens.at(i);
             uint256 tokenBalance = IERC20(token).balanceOf(address(this));
             value = value.add(getTokenValue(token, tokenBalance));
@@ -269,7 +269,7 @@ contract DefiRound is IDefiRound, Ownable {
     {
         uint256 tokensLength = tokens.length;
         genesisAddresses = new address[](tokensLength);
-        for (uint256 i = 0; i < tokensLength; i++) {
+        for (uint256 i = 0; i < tokensLength; ++i) {
             require(supportedTokens.contains(tokens[i]), "TOKEN_UNSUPPORTED");
             genesisAddresses[i] = tokenSettings[supportedTokens.at(i)].genesis;            
         }
@@ -283,7 +283,7 @@ contract DefiRound is IDefiRound, Ownable {
     {
         uint256 tokensLength = tokens.length;
         oracleAddresses = new address[](tokensLength);
-        for (uint256 i = 0; i < tokensLength; i++) {
+        for (uint256 i = 0; i < tokensLength; ++i) {
             require(supportedTokens.contains(tokens[i]), "TOKEN_UNSUPPORTED");
             oracleAddresses[i] = tokenSettings[tokens[i]].oracle;
         }
@@ -292,7 +292,7 @@ contract DefiRound is IDefiRound, Ownable {
     function getAccountData(address account) external view override returns (AccountDataDetails[] memory data) {
         uint256 supportedTokensLength = supportedTokens.length();
         data = new AccountDataDetails[](supportedTokensLength);
-        for (uint256 i = 0; i < supportedTokensLength; i++) {
+        for (uint256 i = 0; i < supportedTokensLength; ++i) {
             address token = supportedTokens.at(i);
             AccountData memory accountTokenInfo = accountData[account];
             if (currentStage >= STAGES.STAGE_2 && accountTokenInfo.token != address(0)) {
@@ -318,7 +318,7 @@ contract DefiRound is IDefiRound, Ownable {
 
         uint256 supportedTokensLength = supportedTokens.length();
         TokenData[] memory tokens = new TokenData[](supportedTokensLength);
-        for (uint256 i = 0; i < supportedTokensLength; i++) {       
+        for (uint256 i = 0; i < supportedTokensLength; ++i) {       
             address token = supportedTokens.at(i);  
             uint256 balance = IERC20(token).balanceOf(address(this));
             (uint256 effective, , ) = _getRateAdjustedAmounts(balance, token);

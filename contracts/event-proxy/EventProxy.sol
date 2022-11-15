@@ -25,6 +25,7 @@ contract EventProxy is Initializable, IEventProxy, Ownable {
     mapping(address => mapping(bytes32 => address[])) public destinations;
 
     function initialize(address stateSender) public initializer {
+        require(stateSender != address(0), "INVALID_ADDRESS");
         __Context_init_unchained();
         __Ownable_init_unchained();
 
@@ -41,7 +42,7 @@ contract EventProxy is Initializable, IEventProxy, Ownable {
     function registerDestinations(
         DestinationsBySenderAndEventType[] memory destinationsBySenderAndEventType
     ) external override onlyOwner {
-        for (uint256 i = 0; i < destinationsBySenderAndEventType.length; i++) {
+        for (uint256 i = 0; i < destinationsBySenderAndEventType.length; ++i) {
             DestinationsBySenderAndEventType memory config = destinationsBySenderAndEventType[i];
             require(config.sender != address(0), "INVALID_SENDER_ADDRESS");
             require(config.eventType != "", "INVALID_EVENT_TYPE");
@@ -51,7 +52,7 @@ contract EventProxy is Initializable, IEventProxy, Ownable {
             // slots and pushing/popping if we need more/less
             delete destinations[config.sender][config.eventType];
 
-            for (uint256 y = 0; y < config.destinations.length; y++) {
+            for (uint256 y = 0; y < config.destinations.length; ++y) {
                 require(config.destinations[y] != address(0), "INVALID_L2_ENDPOINT_ADDRESS");
                 destinations[config.sender][config.eventType].push(config.destinations[y]);
             }
@@ -94,7 +95,7 @@ contract EventProxy is Initializable, IEventProxy, Ownable {
         require(eventType != "", "INVALID_EVENT_TYPE");
 
         address[] memory targetDestinations = destinations[rootMessageSender][eventType];
-        for (uint256 i = 0; i < targetDestinations.length; i++) {
+        for (uint256 i = 0; i < targetDestinations.length; ++i) {
             address destination = targetDestinations[i];
             IEventReceiver(destination).onEventReceive(rootMessageSender, eventType, data);
 
@@ -111,7 +112,7 @@ contract EventProxy is Initializable, IEventProxy, Ownable {
         address[] storage destination = destinations[_sender][_eventType];
 
         uint256 index = 256**2 - 1;
-        for (uint256 i = 0; i < destination.length; i++) {
+        for (uint256 i = 0; i < destination.length; ++i) {
             if (destination[i] == _l2Endpoint) {
                 index = i;
                 break;
@@ -120,7 +121,7 @@ contract EventProxy is Initializable, IEventProxy, Ownable {
 
         require(index < 256**2 - 1, "DESTINATION_DOES_NOT_EXIST");
 
-        for (uint256 i = index; i < destination.length - 1; i++) {
+        for (uint256 i = index; i < destination.length - 1; ++i) {
             destination[i] = destination[i + 1];
         }
         destination.pop();

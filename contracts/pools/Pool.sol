@@ -38,6 +38,10 @@ contract Pool is ILiquidityPool, Initializable, ERC20, Ownable, Pausable, IEvent
 
     bool public depositsPaused;
 
+    mapping (address => bool) public registeredBurners;
+
+    address public rebalancer;
+
     modifier nonReentrant() {
         require(!_entered, "ReentrancyGuard: reentrant call");
         _entered = true;
@@ -57,12 +61,22 @@ contract Pool is ILiquidityPool, Initializable, ERC20, Ownable, Pausable, IEvent
         _;
     }
 
+    modifier onlyRegisteredBurner() {
+      require(registeredBurners[msg.sender], "NOT_REGISTERED_BURNER");
+      _;
+    }
+
+    //@custom:oz-upgrades-unsafe-allow constructor 
+    //solhint-disable-next-line no-empty-blocks
+    constructor() public initializer {}
+
     function initialize(
         ERC20 _underlyer,
         IManager _manager,
         string memory _name,
-        string memory _symbol
-    ) public initializer {
+        string memory _symbol,
+        address _rebalancer
+    ) external initializer {
         require(address(_underlyer) != address(0), "ZERO_ADDRESS");
         require(address(_manager) != address(0), "ZERO_ADDRESS");
 
@@ -70,6 +84,7 @@ contract Pool is ILiquidityPool, Initializable, ERC20, Ownable, Pausable, IEvent
         __Ownable_init_unchained();
         __Pausable_init_unchained();
         __ERC20_init_unchained(_name, _symbol);
+        setRebalancer(_rebalancer);
 
         underlyer = _underlyer;
         manager = _manager;
@@ -78,6 +93,20 @@ contract Pool is ILiquidityPool, Initializable, ERC20, Ownable, Pausable, IEvent
     ///@notice Gets decimals of underlyer so that tAsset decimals will match
     function decimals() public view override returns (uint8) {
         return underlyer.decimals();
+    }
+
+    function registerBurner(address burner, bool allowedBurner) external override onlyOwner {
+      require(burner != address(0), "INVALID_ADDRESS");
+      registeredBurners[burner] = allowedBurner;
+
+      emit BurnerRegistered(burner, allowedBurner);
+    }
+
+    function setRebalancer(address _rebalancer) public override onlyOwner {
+      require(_rebalancer != address(0), "ZERO_ADDRESS");
+      rebalancer = _rebalancer;
+
+      emit RebalancerSet(_rebalancer);
     }
 
     function deposit(uint256 amount) external override whenDepositsNotPaused {
@@ -167,15 +196,13 @@ contract Pool is ILiquidityPool, Initializable, ERC20, Ownable, Pausable, IEvent
         }
     }
 
-    function approveManager(uint256 amount) public override onlyOwner {
-        uint256 currentAllowance = underlyer.allowance(address(this), address(manager));
-        if (currentAllowance < amount) {
-            uint256 delta = amount.sub(currentAllowance);
-            underlyer.safeIncreaseAllowance(address(manager), delta);
-        } else {
-            uint256 delta = currentAllowance.sub(amount);
-            underlyer.safeDecreaseAllowance(address(manager), delta);
-        }
+    function approveManager(uint256 amount) external override onlyOwner {
+        approve(amount, address(manager));
+    }
+
+    function approveRebalancer(uint256 amount) external override onlyOwner {
+        require(rebalancer != address(0), "ZERO_ADDRESS");
+        approve(amount, rebalancer);
     }
 
     /// @dev Adjust withheldLiquidity and requestedWithdrawal if sender does not have sufficient unlocked balance for the transfer
@@ -210,6 +237,40 @@ contract Pool is ILiquidityPool, Initializable, ERC20, Ownable, Pausable, IEvent
         encodeAndSendData(eventSig, recipient);
 
         return success;
+    }
+
+    function controlledBurn(uint256 amount, address account) 
+      external 
+      override 
+      onlyRegisteredBurner 
+      whenNotPaused
+    {
+      require(account != address(0), "INVALID_ADDRESS");
+      require(amount > 0, "INVALID_AMOUNT");
+      if(account != msg.sender) {
+        uint256 currentAllowance = allowance(account, msg.sender);
+        require (currentAllowance >= amount, "INSUFFICIENT_ALLOWANCE");
+        _approve(account, msg.sender, currentAllowance.sub(amount));
+      }
+      
+      // Updating withdrawal requests only if currentBalance - burn amount is 
+      // Less than requested withdrawal
+      uint256 requestedAmount = requestedWithdrawals[account].amount;
+      uint256 balance = balanceOf(account);
+      require(amount <= balance, "INSUFFICIENT_BALANCE");
+      uint256 currentBalance = balance.sub(amount);
+      if(requestedAmount > currentBalance) {
+        if(currentBalance == 0) {
+          delete requestedWithdrawals[account];
+          withheldLiquidity = withheldLiquidity.sub(requestedAmount);
+        } else {
+          requestedWithdrawals[account].amount = currentBalance;
+          withheldLiquidity = withheldLiquidity.sub(requestedAmount.sub(currentBalance));
+        }
+      }
+      _burn(account, amount);
+
+      emit Burned(account, msg.sender, amount);
     }
 
     function pauseDeposit() external override onlyOwner {
@@ -284,5 +345,16 @@ contract Pool is ILiquidityPool, Initializable, ERC20, Ownable, Pausable, IEvent
         );
 
         destinations.fxStateSender.sendMessageToChild(destinations.destinationOnL2, data);
+    }
+
+    function approve(uint256 amount, address approvee) private {
+      uint256 currentAllowance = underlyer.allowance(address(this), approvee);
+        if (currentAllowance < amount) {
+            uint256 delta = amount.sub(currentAllowance);
+            underlyer.safeIncreaseAllowance(approvee, delta);
+        } else {
+            uint256 delta = currentAllowance.sub(amount);
+            underlyer.safeDecreaseAllowance(approvee, delta);
+        }
     }
 }

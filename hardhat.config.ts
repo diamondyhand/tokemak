@@ -1,10 +1,13 @@
 import '@typechain/hardhat';
 import '@nomiclabs/hardhat-ethers';
+import "@nomiclabs/hardhat-truffle5";
+import "@nomiclabs/hardhat-etherscan";
 import '@nomiclabs/hardhat-waffle';
 import 'hardhat-deploy';
 import 'solidity-coverage';
 import 'hardhat-contract-sizer';
 import 'hardhat-gas-reporter';
+import '@openzeppelin/hardhat-upgrades';
 
 import { HardhatUserConfig } from 'hardhat/types';
 import { task } from 'hardhat/config';
@@ -26,7 +29,37 @@ task('accounts', 'Prints the list of accounts', async (taskArgs, hre) => {
  * @type import('hardhat/config').HardhatUserConfig
  */
 export default {
-  solidity: '0.8.4',
+  solidity: {
+    compilers: [
+      {
+        version: "0.6.11",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 999,
+          },
+        },
+      },
+      {
+        version: "0.6.12", // For MasterChef contract
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 999999,
+          },
+        },
+      },
+      {
+        version: "0.7.6", // Voting
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 999999,
+          },
+        },
+      },
+    ],
+  },
   settings: {
     optimizer: {
       enabled: true,

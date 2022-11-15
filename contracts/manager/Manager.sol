@@ -16,7 +16,8 @@ import "../interfaces/events/Destinations.sol";
 import "../interfaces/events/CycleRolloverEvent.sol";
 import "../interfaces/events/IEventSender.sol";
 
-//solhint-disable not-rely-on-time
+//solhint-disable not-rely-on-time 
+//solhint-disable var-name-mixedcase
 contract Manager is IManager, Initializable, AccessControl, IEventSender {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
@@ -24,10 +25,13 @@ contract Manager is IManager, Initializable, AccessControl, IEventSender {
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSet for EnumerableSet.Bytes32Set;
 
-    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
-    bytes32 public constant ROLLOVER_ROLE = keccak256("ROLLOVER_ROLE");
-    bytes32 public constant MID_CYCLE_ROLE = keccak256("MID_CYCLE_ROLE");
-    bytes32 public constant START_ROLLOVER_ROLE = keccak256("START_ROLLOVER_ROLE");
+    bytes32 public immutable ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public immutable ROLLOVER_ROLE = keccak256("ROLLOVER_ROLE");
+    bytes32 public immutable MID_CYCLE_ROLE = keccak256("MID_CYCLE_ROLE");
+    bytes32 public immutable START_ROLLOVER_ROLE = keccak256("START_ROLLOVER_ROLE");
+    bytes32 public immutable ADD_LIQUIDITY_ROLE = keccak256("ADD_LIQUIDITY_ROLE");
+    bytes32 public immutable REMOVE_LIQUIDITY_ROLE = keccak256("REMOVE_LIQUIDITY_ROLE");
+    bytes32 public immutable MISC_OPERATION_ROLE = keccak256("MISC_OPERATION_ROLE");
 
     uint256 public currentCycle; // Start timestamp of current cycle
     uint256 public currentCycleIndex; // Uint representing current cycle
@@ -101,6 +105,9 @@ contract Manager is IManager, Initializable, AccessControl, IEventSender {
         _setupRole(ROLLOVER_ROLE, _msgSender());
         _setupRole(MID_CYCLE_ROLE, _msgSender());
         _setupRole(START_ROLLOVER_ROLE, _msgSender());
+        _setupRole(ADD_LIQUIDITY_ROLE, _msgSender());
+        _setupRole(REMOVE_LIQUIDITY_ROLE, _msgSender());
+        _setupRole(MISC_OPERATION_ROLE, _msgSender());
 
         setNextCycleStartTime(_nextCycleStartTime);
     }
@@ -144,7 +151,7 @@ contract Manager is IManager, Initializable, AccessControl, IEventSender {
     function getPools() external view override returns (address[] memory) {
         uint256 poolsLength = pools.length();
         address[] memory returnData = new address[](poolsLength);
-        for (uint256 i = 0; i < poolsLength; i++) {
+        for (uint256 i = 0; i < poolsLength; ++i) {
             returnData[i] = pools.at(i);
         }
         return returnData;
@@ -153,7 +160,7 @@ contract Manager is IManager, Initializable, AccessControl, IEventSender {
     function getControllers() external view override returns (bytes32[] memory) {
         uint256 controllerIdsLength = controllerIds.length();
         bytes32[] memory returnData = new bytes32[](controllerIdsLength);
-        for (uint256 i = 0; i < controllerIdsLength; i++) {
+        for (uint256 i = 0; i < controllerIdsLength; ++i) {
             returnData[i] = controllerIds.at(i);
         }
         return returnData;
@@ -175,7 +182,7 @@ contract Manager is IManager, Initializable, AccessControl, IEventSender {
         onlyMidCycle
         nonReentrant
     {
-        for (uint256 x = 0; x < params.cycleSteps.length; x++) {
+        for (uint256 x = 0; x < params.cycleSteps.length; ++x) {
             _executeControllerCommand(params.cycleSteps[x]);
         }
     }
@@ -186,7 +193,7 @@ contract Manager is IManager, Initializable, AccessControl, IEventSender {
         require(block.timestamp > nextCycleStartTime, "PREMATURE_EXECUTION");
 
         // Transfer deployable liquidity out of the pools and into the manager
-        for (uint256 i = 0; i < params.poolData.length; i++) {
+        for (uint256 i = 0; i < params.poolData.length; ++i) {
             require(pools.contains(params.poolData[i].pool), "INVALID_POOL");
             ILiquidityPool pool = ILiquidityPool(params.poolData[i].pool);
             IERC20 underlyingToken = pool.underlyer();
@@ -199,12 +206,12 @@ contract Manager is IManager, Initializable, AccessControl, IEventSender {
         }
 
         // Deploy or withdraw liquidity
-        for (uint256 x = 0; x < params.cycleSteps.length; x++) {
+        for (uint256 x = 0; x < params.cycleSteps.length; ++x) {
             _executeControllerCommand(params.cycleSteps[x]);
         }
 
         // Transfer recovered liquidity back into the pools; leave no funds in the manager
-        for (uint256 y = 0; y < params.poolsForWithdraw.length; y++) {
+        for (uint256 y = 0; y < params.poolsForWithdraw.length; ++y) {
             require(pools.contains(params.poolsForWithdraw[y]), "INVALID_POOL");
             ILiquidityPool pool = ILiquidityPool(params.poolsForWithdraw[y]);
             IERC20 underlyingToken = pool.underlyer();
@@ -228,7 +235,7 @@ contract Manager is IManager, Initializable, AccessControl, IEventSender {
         uint256 length = poolAddresses.length;
         uint256[] memory amounts = new uint256[](length);
 
-        for (uint256 i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; ++i) {
             address currentPoolAddress = poolAddresses[i];
             require(pools.contains(currentPoolAddress), "INVALID_ADDRESS");
             IERC20 underlyer = IERC20(ILiquidityPool(currentPoolAddress).underlyer());
@@ -256,6 +263,10 @@ contract Manager is IManager, Initializable, AccessControl, IEventSender {
         // risk based on the design of our system
         require(block.timestamp > nextCycleStartTime, "PREMATURE_EXECUTION");
         rolloverStarted = true;
+
+        bytes32 eventSig = "Cycle Rollover Start";
+        encodeAndSendData(eventSig);
+
         emit CycleRolloverStarted(block.timestamp);
     }
 
@@ -322,4 +333,7 @@ contract Manager is IManager, Initializable, AccessControl, IEventSender {
 
         destinations.fxStateSender.sendMessageToChild(destinations.destinationOnL2, data);
     }
+
+    // solhint-disable-next-line no-empty-blocks
+    receive() external payable {}
 }

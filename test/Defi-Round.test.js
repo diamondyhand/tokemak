@@ -1,10 +1,12 @@
 const {expect, Assertion} = require("chai");
 const timeMachine = require("ganache-time-traveler");
-const {artifacts, ethers, upgrades, network} = require("hardhat");
-const ERC20 = artifacts.require("ERC20");
-const chainlinkAggregatorV3 = artifacts.require("@chainlink/contracts/src/v0.6/interfaces/AggregatorV3Interface.sol");
-const {MaxUint256} = ethers.constants;
+const {artifacts, ethers, waffle} = require("hardhat");
+const {deployMockContract} = waffle;
+const ERC20 = artifacts.require("@openzeppelin/contracts/token/ERC20/ERC20.sol");
+const chainlink = artifacts.require("@chainlink/contracts/src/v0.6/interfaces/AggregatorV3Interface.sol");
+const pool = artifacts.require("Pool");
 const BN = ethers.BigNumber;
+const {getRoot, getProof, MerkleTree} = require("@airswap/merkle");
 
 Assertion.addMethod("withManuallyValidatedArgs", function (x, validate) {
     const derivedPromise = this.promise.then(() => {
@@ -26,39 +28,25 @@ describe("Test Defi-Round", () => {
     let snapshotId;
     let deployer;
     let user1;
+    let user2;
     let treasury;
-
-    const WETH_WHALE_ADDRESS = "0x4a18a50a8328b42773268B4b436254056b7d70CE";
-    const DAI_WHALE_ADDRESS = "0x5D38B4e4783E34e2301A2a36c39a03c45798C4dD";
-    const USDC_WHALE_ADDRESS = "0x0548F59fEE79f8832C299e01dCA5c76F034F558e";
-
-    const WETH_ADDRESS = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-    const DAI_ADDRESS = "0x6b175474e89094c44da98b954eedeac495271d0f";
-    const USDC_ADDRESS = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
-
-    const WETH_ORACLE_ADDRESS = "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419";
-    const DAI_ORACLE_ADDRESS = "0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9";
-    const USDC_ORACLE_ADDRESS = "0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6";
-
-    const CYCLE_DURATION = 2; // blocks
 
     let weth;
     let dai;
     let usdc;
+    let tokeToken;
 
     let wethOracle;
     let daiOracle;
     let usdcOracle;
 
-    let managerContract;
-
     let wethGenesisPool;
     let daiGenesisPool;
     let usdcGenesisPool;
 
-    let rebalancer;
-
-    let usdcWhale;
+    const defaulUsdValueOfEth = 4020.15;
+    const defaulUsdValueOfDai = 0.99;
+    const defaulUsdValueOfUsdc = 1.0;
 
     const defaultWethLimit = 50;
     const defaultDaiLimit = 100000;
@@ -77,87 +65,29 @@ describe("Test Defi-Round", () => {
     });
 
     before(async () => {
-        [deployer, user1, treasury, rebalancer] = await ethers.getSigners();
+        [deployer, user1, user2] = await ethers.getSigners();
+        weth = await deployMockContract(deployer, ERC20.abi);
+        treasury = await deployMockContract(deployer, ERC20.abi);
 
-        //Asset contracts
-        weth = await ethers.getContractAt(ERC20.abi, WETH_ADDRESS);
-        dai = await ethers.getContractAt(ERC20.abi, DAI_ADDRESS);
-        usdc = await ethers.getContractAt(ERC20.abi, USDC_ADDRESS);
+        const DefiRoundFactory = await ethers.getContractFactory("DefiRound");
+        defiContract = await DefiRoundFactory.deploy(weth.address, treasury.address, maxTotalValue.toString());
 
-        //Chainlink Oracles for those assets
-        wethOracle = await ethers.getContractAt(chainlinkAggregatorV3.abi, WETH_ORACLE_ADDRESS);
-        daiOracle = await ethers.getContractAt(chainlinkAggregatorV3.abi, DAI_ORACLE_ADDRESS);
-        usdcOracle = await ethers.getContractAt(chainlinkAggregatorV3.abi, USDC_ORACLE_ADDRESS);
+        tokeToken = await deployMockContract(deployer, ERC20.abi);
 
-        const cycleStartTime = (await ethers.provider.getBlock("latest")).timestamp + 10;
+        wethOracle = await deployMockContract(deployer, chainlink.abi);
+        await weth.mock.decimals.returns(18);
 
-        // Deploy Manager
-        const managerFactory = await ethers.getContractFactory("Manager");
-        managerContract = await upgrades.deployProxy(managerFactory, [CYCLE_DURATION, cycleStartTime], {
-            unsafeAllow: ["delegatecall", "constructor", "state-variable-assignment", "state-variable-immutable"],
-        });
-        await managerContract.deployed();
-        //Deploy our Pools
+        dai = await deployMockContract(deployer, ERC20.abi);
+        daiOracle = await deployMockContract(deployer, chainlink.abi);
+        await dai.mock.decimals.returns(18);
 
-        const poolFactory = await ethers.getContractFactory("Pool");
+        usdc = await deployMockContract(deployer, ERC20.abi);
+        usdcOracle = await deployMockContract(deployer, chainlink.abi);
+        await usdc.mock.decimals.returns(6);
 
-        wethGenesisPool = await upgrades.deployProxy(
-            poolFactory,
-            [WETH_ADDRESS, managerContract.address, "TokemakWethPool", "tWETH", rebalancer.address],
-            {unsafeAllow: ["constructor"]}
-        );
-        await wethGenesisPool.deployed();
-
-        daiGenesisPool = await upgrades.deployProxy(
-            poolFactory,
-            [DAI_ADDRESS, managerContract.address, "TokemakDaiPool", "tDAI", rebalancer.address],
-            {unsafeAllow: ["constructor"]}
-        );
-        await daiGenesisPool.deployed();
-
-        usdcGenesisPool = await upgrades.deployProxy(
-            poolFactory,
-            [USDC_ADDRESS, managerContract.address, "TokemakUsdcPool", "tUSDC", rebalancer.address],
-            {unsafeAllow: ["constructor"]}
-        );
-        await usdcGenesisPool.deployed();
-
-        // Register pools to manager
-        await managerContract.registerPool(wethGenesisPool.address);
-        await managerContract.registerPool(daiGenesisPool.address);
-        await managerContract.registerPool(usdcGenesisPool.address);
-
-        // Deploy TOKE
-
-        const defiFactory = await ethers.getContractFactory("DefiRound");
-        defiContract = await defiFactory.deploy(WETH_ADDRESS, treasury.address, maxTotalValue);
-
-        await deployer.sendTransaction({
-            value: ethers.utils.parseEther("10.0"),
-            to: WETH_WHALE_ADDRESS,
-        });
-        await network.provider.request({
-            method: "hardhat_impersonateAccount",
-            params: [WETH_WHALE_ADDRESS],
-        });
-
-        await deployer.sendTransaction({
-            value: ethers.utils.parseEther("10.0"),
-            to: DAI_WHALE_ADDRESS,
-        });
-        await network.provider.request({
-            method: "hardhat_impersonateAccount",
-            params: [DAI_WHALE_ADDRESS],
-        });
-
-        await deployer.sendTransaction({
-            value: ethers.utils.parseEther("10.0"),
-            to: USDC_WHALE_ADDRESS,
-        });
-        await network.provider.request({
-            method: "hardhat_impersonateAccount",
-            params: [USDC_WHALE_ADDRESS],
-        });
+        wethGenesisPool = await deployMockContract(deployer, pool.abi);
+        daiGenesisPool = await deployMockContract(deployer, pool.abi);
+        usdcGenesisPool = await deployMockContract(deployer, pool.abi);
     });
 
     const WETHAmount = (number) => {
@@ -170,712 +100,723 @@ describe("Test Defi-Round", () => {
         return ethers.utils.parseUnits(number.toString(), 6);
     };
     const WETHDeposit = (number) => {
-        return [WETH_ADDRESS, WETHAmount(number)];
+        return [weth.address, WETHAmount(number)];
     };
     const DAIDeposit = (number) => {
-        return [DAI_ADDRESS, DAIAmount(number)];
+        return [dai.address, DAIAmount(number)];
     };
     const USDCDeposit = (number) => {
-        return [USDC_ADDRESS, USDCAmount(number)];
+        return [usdc.address, USDCAmount(number)];
     };
     const USDValue = (number) => {
         return ethers.utils.parseUnits(number.toString(), 8);
     };
-    const ParseWETHNumber = (number, precision) => {
+    const ParseTokeRate = (number, ratePrecision, precision) => {
+        return Number(
+            Number(
+                ethers.utils.formatUnits(number[1].mul(BN.from("10").pow(18)).div(number[2]), ratePrecision).toString()
+            ).toFixed(precision)
+        );
+    };
+    const ParseUsdRate = (number, precision) => {
+        return Number(Number(ethers.utils.formatUnits(number.toString(), 8)).toFixed(precision));
+    };
+    const ParseTokeValue = (number, precision) => {
         return Number(Number(ethers.utils.formatUnits(number.toString(), 18)).toFixed(precision));
     };
-
-    const ParseUSDCNumber = (number, precision) => {
-        return Number(Number(ethers.utils.formatUnits(number.toString(), 6)).toFixed(precision));
+    const ParseWethValue = (number, precision) => {
+        return Number(Number(ethers.utils.formatUnits(number.toString(), 18)).toFixed(precision));
+    };
+    // const ParseUsdcValue = (number, precision) => {
+    //   return Number(
+    //     Number(ethers.utils.formatUnits(number.toString(), 6)).toFixed(precision)
+    //   );
+    // };
+    const SetUSDValuesOfTheTokens = async (ethAmount, daiAmount, usdcAmount) => {
+        await wethOracle.mock.latestRoundData.returns(0, USDValue(ethAmount), 0, 0, 0);
+        await daiOracle.mock.latestRoundData.returns(0, USDValue(daiAmount), 0, 0, 0);
+        await usdcOracle.mock.latestRoundData.returns(0, USDValue(usdcAmount), 0, 0, 0);
     };
 
     const maxTotalValue = USDValue(60000000);
 
-    describe("Deposit", async () => {
-        it("Requires pre-approval", async () => {
-            const usdcBalance = 1500;
-
-            await publishSupportedTokens();
-
-            usdcWhale = await ethers.provider.getSigner(USDC_WHALE_ADDRESS);
-
-            await expect(defiContract.connect(usdcWhale).deposit(USDCDeposit(usdcBalance), [])).to.be.revertedWith(
-                "ERC20: transfer amount exceeds allowance"
-            );
-
-            await usdc.connect(usdcWhale).increaseAllowance(defiContract.address, USDCAmount(usdcBalance));
-
-            await defiContract.connect(usdcWhale).deposit(USDCDeposit(usdcBalance), []);
-        });
-
-        it("Converts ETH to WETH and deposits to contract", async () => {
-            const ethAmount = 4.7;
-
-            await publishSupportedTokens();
-
-            usdcWhale = await ethers.provider.getSigner(USDC_WHALE_ADDRESS);
-
-            const contractBalanceBefore = await weth.connect(user1).balanceOf(defiContract.address);
-
-            await defiContract.connect(usdcWhale).deposit(WETHDeposit(ethAmount), [], {
-                value: WETHAmount(ethAmount),
-            });
-
-            const contractBalanceAfter = await weth.connect(user1).balanceOf(defiContract.address);
-
-            expect(ParseWETHNumber(contractBalanceAfter.sub(contractBalanceBefore), 1)).to.equal(ethAmount);
-        });
-
-        it("Updates total value", async () => {
-            const usdcBalance = 1500;
-
-            await publishSupportedTokens();
-
-            usdcWhale = await ethers.provider.getSigner(USDC_WHALE_ADDRESS);
-
-            await usdc.connect(usdcWhale).increaseAllowance(defiContract.address, USDCAmount(usdcBalance));
-
-            const usdcRoundData = await usdcOracle.connect(user1).latestRoundData();
-
-            const totalBefore = await defiContract.connect(user1).totalValue();
-
-            await defiContract.connect(usdcWhale).deposit(USDCDeposit(usdcBalance), []);
-
-            const totalAfter = await defiContract.connect(user1).totalValue();
-
-            expect(totalAfter.sub(totalBefore)).to.be.equal(usdcRoundData[1].mul(BN.from(usdcBalance)));
-        });
-    });
-
-    describe("Stage 2", async () => {
-        it("WETH converted back to ETH on request", async () => {
-            //ETH to ETH
-            const ethAmount = 4.7;
-
-            await publishSupportedTokens();
-
-            const wethWhale = await ethers.provider.getSigner(WETH_WHALE_ADDRESS);
-
-            const whaleBalanceBeforeDeposit = await ethers.provider.getBalance(WETH_WHALE_ADDRESS);
-
-            const contractBalanceBefore = await weth.connect(user1).balanceOf(defiContract.address);
-
-            const depositResult = await defiContract.connect(wethWhale).deposit(WETHDeposit(ethAmount), [], {
-                value: WETHAmount(ethAmount),
-            });
-            const depositReceipt = await ethers.provider.getTransactionReceipt(depositResult.hash);
-            const depositGasUsed = depositReceipt.gasUsed;
-
-            const contractBalanceAfter = await weth.connect(user1).balanceOf(defiContract.address);
-
-            const whaleBalanceAfterDeposit = await ethers.provider.getBalance(WETH_WHALE_ADDRESS);
-
-            expect(ParseWETHNumber(contractBalanceAfter.sub(contractBalanceBefore), 1)).to.equal(ethAmount);
-
-            const tokePrice = 10;
-
-            await publishRates(tokePrice);
-
-            const withdrawResult = await defiContract.connect(wethWhale).withdraw(WETHDeposit(ethAmount), true);
-            const withdrawReceipt = await ethers.provider.getTransactionReceipt(withdrawResult.hash);
-            const withdrawGasUsed = withdrawReceipt.gasUsed;
-
-            const whaleBalanceAfterWithdraw = await ethers.provider.getBalance(WETH_WHALE_ADDRESS);
-
-            expect(
-                whaleBalanceAfterDeposit.add(WETHAmount(ethAmount)).add(depositGasUsed.mul(depositResult.gasPrice))
-            ).to.be.equal(whaleBalanceBeforeDeposit);
-
-            expect(whaleBalanceBeforeDeposit).to.be.equal(
-                whaleBalanceAfterWithdraw
-                    .add(depositGasUsed.mul(depositResult.gasPrice))
-                    .add(withdrawGasUsed.mul(withdrawResult.gasPrice))
-            );
-        });
-
-        it("Can submit ETH but get WETH during withdraw", async () => {
-            //ETH to WETH
-            const ethAmount = 4.7;
-
-            await publishSupportedTokens();
-
-            const wethWhale = await ethers.provider.getSigner(WETH_WHALE_ADDRESS);
-
-            const whaleEthBalanceBeforeDeposit = await ethers.provider.getBalance(WETH_WHALE_ADDRESS);
-
-            const contractBalanceBefore = await weth.connect(user1).balanceOf(defiContract.address);
-
-            const depositResult = await defiContract.connect(wethWhale).deposit(WETHDeposit(ethAmount), [], {
-                value: WETHAmount(ethAmount),
-            });
-            const depositReceipt = await ethers.provider.getTransactionReceipt(depositResult.hash);
-            const depositGasUsed = depositReceipt.gasUsed;
-
-            const contractBalanceAfter = await weth.connect(user1).balanceOf(defiContract.address);
-
-            expect(ParseWETHNumber(contractBalanceAfter.sub(contractBalanceBefore), 1)).to.equal(ethAmount);
-
-            const tokePrice = 10;
-
-            await publishRates(tokePrice);
-
-            const whaleWethBalanceBeforeWithdraw = await weth.connect(user1).balanceOf(WETH_WHALE_ADDRESS);
-
-            const withdrawResult = await defiContract.connect(wethWhale).withdraw(WETHDeposit(ethAmount), false);
-            const withdrawReceipt = await ethers.provider.getTransactionReceipt(withdrawResult.hash);
-            const withdrawGasUsed = withdrawReceipt.gasUsed;
-
-            const whaleEthBalanceAfterWithdraw = await ethers.provider.getBalance(WETH_WHALE_ADDRESS);
-            const whatlWethBalanceAfterWithdraw = await weth.connect(user1).balanceOf(WETH_WHALE_ADDRESS);
-
-            //Confirm withdraw didn't go back as ETH
-            expect(whaleEthBalanceBeforeDeposit.sub(WETHAmount(ethAmount))).to.be.equal(
-                whaleEthBalanceAfterWithdraw
-                    .add(depositGasUsed.mul(depositResult.gasPrice))
-                    .add(withdrawGasUsed.mul(withdrawResult.gasPrice))
-            );
-
-            //Confirm withdraw increased WETH balance by amount
-            expect(whaleWethBalanceBeforeWithdraw.add(WETHAmount(ethAmount))).to.be.equal(
-                whatlWethBalanceAfterWithdraw
-            );
-        });
-
-        it("Can submit WETH and get WETH during withdraw", async () => {
-            //WETH to WETH
-            const ethAmount = 4.7;
-
-            await publishSupportedTokens();
-
-            const wethWhale = await ethers.provider.getSigner(WETH_WHALE_ADDRESS);
-
-            const whaleWethBalanceBeforeDeposit = await weth.connect(user1).balanceOf(WETH_WHALE_ADDRESS);
-
-            const contractBalanceBefore = await weth.connect(user1).balanceOf(defiContract.address);
-
-            await weth.connect(wethWhale).approve(defiContract.address, WETHAmount(ethAmount));
-            await defiContract.connect(wethWhale).deposit(WETHDeposit(ethAmount), []);
-
-            const contractBalanceAfter = await weth.connect(user1).balanceOf(defiContract.address);
-
-            const whaleWethBalanceAfterDeposit = await weth.connect(user1).balanceOf(WETH_WHALE_ADDRESS);
-
-            expect(ParseWETHNumber(contractBalanceAfter.sub(contractBalanceBefore), 1)).to.equal(ethAmount);
-
-            const tokePrice = 10;
-
-            await publishRates(tokePrice);
-
-            await defiContract.connect(wethWhale).withdraw(WETHDeposit(ethAmount), false);
-
-            const whatlWethBalanceAfterWithdraw = await weth.connect(user1).balanceOf(WETH_WHALE_ADDRESS);
-
-            expect(whaleWethBalanceAfterDeposit.add(WETHAmount(ethAmount))).to.be.equal(whaleWethBalanceBeforeDeposit);
-            expect(whaleWethBalanceBeforeDeposit).to.be.equal(whatlWethBalanceAfterWithdraw);
-        });
-
-        it("Can submit WETH and get ETH during withdraw", async () => {
-            //WETH to ETH
-            const ethAmount = 4.7;
-
-            await publishSupportedTokens();
-
-            const wethWhale = await ethers.provider.getSigner(WETH_WHALE_ADDRESS);
-
-            const whaleEthBalanceBeforeWithdraw = await ethers.provider.getBalance(WETH_WHALE_ADDRESS);
-
-            const contractBalanceBefore = await weth.connect(user1).balanceOf(defiContract.address);
-
-            const approveResult = await weth.connect(wethWhale).approve(defiContract.address, WETHAmount(ethAmount));
-            const approveReceipt = await ethers.provider.getTransactionReceipt(approveResult.hash);
-            const approveGasUsed = approveReceipt.gasUsed;
-
-            const depositResult = await defiContract.connect(wethWhale).deposit(WETHDeposit(ethAmount), []);
-            const depositReceipt = await ethers.provider.getTransactionReceipt(depositResult.hash);
-
-            const depositGasUsed = depositReceipt.gasUsed;
-
-            const contractBalanceAfter = await weth.connect(user1).balanceOf(defiContract.address);
-
-            expect(ParseWETHNumber(contractBalanceAfter.sub(contractBalanceBefore), 1)).to.equal(ethAmount);
-
-            const tokePrice = 10;
-
-            await publishRates(tokePrice);
-
-            const withdrawResult = await defiContract.connect(wethWhale).withdraw(WETHDeposit(ethAmount), true);
-            const withdrawReceipt = await ethers.provider.getTransactionReceipt(withdrawResult.hash);
-            const withdrawGasUsed = withdrawReceipt.gasUsed;
-
-            const whaleEthBalanceAfterWithdraw = await ethers.provider.getBalance(WETH_WHALE_ADDRESS);
-
-            expect(
-                whaleEthBalanceBeforeWithdraw
-                    .sub(approveGasUsed.mul(approveResult.gasPrice))
-                    .sub(depositGasUsed.mul(depositResult.gasPrice))
-                    .sub(withdrawGasUsed.mul(withdrawResult.gasPrice))
-                    .add(WETHAmount(ethAmount))
-            ).to.be.equal(whaleEthBalanceAfterWithdraw);
-        });
-    });
-
-    describe("Finalize Assets", async () => {
-        it("Reverts when transfer to treasury is not complete", async () => {
-            const ethAmt = 5;
-
-            await publishSupportedTokens();
-
-            const wethWhale = await ethers.provider.getSigner(WETH_WHALE_ADDRESS);
-            await weth.connect(wethWhale).approve(defiContract.address, WETHAmount(ethAmt));
-            await defiContract.connect(wethWhale).deposit(WETHDeposit(ethAmt), []);
-
-            await expect(defiContract.connect(wethWhale).finalizeAssets(false)).to.be.revertedWith("NOT_SYSTEM_FINAL");
-        });
-
-        it("Reverts when no over-subscription", async () => {
-            const ethAmt = 5;
-
-            await publishSupportedTokens();
-
-            const wethWhale = await ethers.provider.getSigner(WETH_WHALE_ADDRESS);
-            await weth.connect(wethWhale).transfer(user1.address, WETHAmount(ethAmt));
-
-            await weth.connect(user1).approve(defiContract.address, WETHAmount(ethAmt));
-            await defiContract.connect(user1).deposit(WETHDeposit(ethAmt), []);
-
-            const tokePrice = 8.75;
-
-            await publishRates(tokePrice, 0, 0, 0, 1, MaxUint256);
-            await goToStage3();
-            await transferToTreasury();
-            await expect(defiContract.connect(user1).finalizeAssets(false)).to.be.revertedWith("NOTHING_TO_MOVE");
-        });
-
-        it("Allows a rate such that all funds could be pulled to treasury in an emergency", async () => {
-            const ethAmt = 5;
-
-            await publishSupportedTokens();
-
-            const wethWhale = await ethers.provider.getSigner(WETH_WHALE_ADDRESS);
-            await weth.connect(wethWhale).transfer(user1.address, WETHAmount(ethAmt));
-
-            await weth.connect(user1).approve(defiContract.address, WETHAmount(ethAmt));
-            await defiContract.connect(user1).deposit(WETHDeposit(ethAmt), []);
-
-            await defiContract.connect(deployer).publishRates(
-                [
-                    [weth.address, increaseBNPrecision(BN.from("1"), 18), increaseBNPrecision(BN.from("1"), 18)],
-                    [dai.address, increaseBNPrecision(BN.from("1"), 18), increaseBNPrecision(BN.from("1"), 18)],
-                    [usdc.address, increaseBNPrecision(BN.from("1"), 6), increaseBNPrecision(BN.from("1"), 18)],
-                ],
-                [1, 1],
-                1
-            );
-
-            await goToStage3();
-            await transferToTreasury();
-
-            const defiBalance = await weth.connect(deployer).balanceOf(defiContract.address);
-            const treasuryBalance = await weth.connect(deployer).balanceOf(treasury.address);
-
-            expect(defiBalance).to.be.equal(0);
-            expect(treasuryBalance).to.be.equal(WETHAmount(ethAmt));
-        });
-
-        it("Setting depositToGenesis to true", async () => {
-            const ethAmt = 10;
-
-            await publishSupportedTokens();
-
-            const wethWhale = await ethers.provider.getSigner(WETH_WHALE_ADDRESS);
-            await weth.connect(wethWhale).approve(defiContract.address, WETHAmount(ethAmt));
-            await defiContract.connect(wethWhale).deposit(WETHDeposit(ethAmt), []);
-
-            const tokePrice = 8.75;
-
-            await publishRates(tokePrice);
-            await goToStage3(1, MaxUint256);
-            await transferToTreasury();
-
-            const arr = [];
-
-            await expect(defiContract.connect(wethWhale).finalizeAssets(true))
-                .to.emit(weth, "Transfer")
-                .withManuallyValidatedArgs(weth, (args) => {
-                    arr.push(args);
-                })
-                .and.to.emit(defiContract, "GenesisTransfer")
-                .withManuallyValidatedArgs(defiContract, (args) => {
-                    expect(args[0]).to.equal(WETH_WHALE_ADDRESS);
-                    expect(ParseWETHNumber(args[1], 2)).to.equal(2.5);
-                })
-                .and.to.emit(defiContract, "AssetsFinalized")
-                .withManuallyValidatedArgs(defiContract, (args) => {
-                    expect(args[0]).to.equal(WETH_WHALE_ADDRESS);
-                    expect(args[1]).to.equal(weth.address);
-                    expect(ParseWETHNumber(args[2], 2)).to.equal(2.5);
-                });
-
-            expect(arr[0][0]).to.equal(defiContract.address);
-            expect(arr[0][1]).to.equal(wethGenesisPool.address);
-            expect(ParseWETHNumber(arr[0][2], 2)).to.equal(2.5);
-        });
-
-        it("Using just ETH when in range with round numbers", async () => {
-            const ethAmt = 5;
-
-            await publishSupportedTokens();
-
-            const wethWhale = await ethers.provider.getSigner(WETH_WHALE_ADDRESS);
-            await weth.connect(wethWhale).approve(defiContract.address, WETHAmount(ethAmt));
-            await defiContract.connect(wethWhale).deposit(WETHDeposit(ethAmt), []);
-
+    describe("Publish Rates", async () => {
+        it("Accepts and returns data when in range", async () => {
             const tokePrice = 5;
 
-            await publishRates(tokePrice);
-            await goToStage3(1, MaxUint256);
-            await transferToTreasury();
+            await publishSupportedTokens();
+            await publishRates(tokePrice, 10, 1, 1);
+            const rates = await defiContract.connect(deployer).getRates([weth.address, dai.address, usdc.address]);
 
-            const arr = [];
-
-            await expect(defiContract.connect(wethWhale).finalizeAssets(false))
-                .to.emit(weth, "Transfer")
-                .withManuallyValidatedArgs(weth, (args) => {
-                    arr.push(args);
-                })
-                .and.to.emit(defiContract, "AssetsFinalized")
-                .withManuallyValidatedArgs(defiContract, (args) => {
-                    expect(args[0].toUpperCase()).to.equal(WETH_WHALE_ADDRESS.toUpperCase());
-                    expect(args[1].toUpperCase()).to.equal(weth.address.toUpperCase());
-                    expect(ParseWETHNumber(args[2], 2)).to.equal(1.25);
-                });
-
-            expect(arr[0][0]).to.equal(defiContract.address);
-            expect(arr[0][1]).to.equal(WETH_WHALE_ADDRESS);
-            expect(ParseWETHNumber(arr[0][2], 2)).to.equal(1.25);
+            expect(rates.length).to.equal(3);
+            expect(ParseTokeRate(rates[0], 18, 1)).to.equal(0.5);
+            expect(ParseTokeRate(rates[1], 18, 0)).to.equal(5);
+            expect(ParseTokeRate(rates[2], 6, 0)).to.equal(5);
         });
 
-        it("Using just USDC when in range with round numbers", async () => {
-            const usdcBalance = 1500;
+        it("Accepts and returns data when in range with 2 precision TOKE price", async () => {
+            const tokePrice = 5.25;
 
             await publishSupportedTokens();
+            await publishRates(tokePrice, 49.875, 1, 2);
+            const rates = await defiContract.connect(deployer).getRates([weth.address, dai.address, usdc.address]);
 
-            const usdcWhale = await ethers.provider.getSigner(USDC_WHALE_ADDRESS);
-            await usdc.connect(usdcWhale).approve(usdcGenesisPool.address, USDCAmount(usdcBalance));
-            await usdc.connect(usdcWhale).approve(defiContract.address, USDCAmount(usdcBalance));
-            await defiContract.connect(usdcWhale).deposit(USDCDeposit(usdcBalance), []);
-
-            const tokePrice = 5; //USDC Price = $1
-
-            await publishRates(tokePrice);
-            await goToStage3(1, MaxUint256);
-            await transferToTreasury();
-
-            const arr = [];
-
-            await expect(defiContract.connect(usdcWhale).finalizeAssets(false))
-                .to.emit(usdc, "Transfer")
-                .withManuallyValidatedArgs(usdc, (args) => {
-                    arr.push(args);
-                })
-                .and.to.emit(defiContract, "AssetsFinalized")
-                .withManuallyValidatedArgs(defiContract, (args) => {
-                    expect(args[0].toUpperCase()).to.equal(USDC_WHALE_ADDRESS.toUpperCase());
-                    expect(args[1].toUpperCase()).to.equal(usdc.address.toUpperCase());
-                    expect(ParseUSDCNumber(args[2], 0)).to.equal(375);
-                });
-
-            expect(arr[0][0]).to.equal(defiContract.address);
-            expect(arr[0][1]).to.equal(USDC_WHALE_ADDRESS);
-            expect(ParseUSDCNumber(arr[0][2], 0)).to.equal(375);
+            expect(rates.length).to.equal(3);
+            expect(ParseTokeRate(rates[0], 18, 8)).to.equal(0.10526316);
+            expect(ParseTokeRate(rates[1], 18, 2)).to.equal(5.25);
+            expect(ParseTokeRate(rates[2], 6, 3)).to.equal(2.625);
         });
 
-        it("Using just USDC when in range", async () => {
-            const usdcBalance = 1500;
+        it("Accepts and returns data when in range with 8 precision TOKE price", async () => {
+            const tokePrice = 5.25781243;
 
             await publishSupportedTokens();
+            await publishRates(tokePrice, 49.87511178, 0.99999999, 1.01);
+            const rates = await defiContract.connect(deployer).getRates([weth.address, dai.address, usdc.address]);
 
-            const usdcWhale = await ethers.provider.getSigner(USDC_WHALE_ADDRESS);
-            await usdc.connect(usdcWhale).approve(defiContract.address, USDCAmount(usdcBalance));
-            await defiContract.connect(usdcWhale).deposit(USDCDeposit(usdcBalance), []);
-
-            const tokePrice = 8.75;
-
-            await publishRates(tokePrice);
-            await goToStage3(1, MaxUint256);
-            await transferToTreasury();
-
-            const arr = [];
-
-            await expect(defiContract.connect(usdcWhale).finalizeAssets(false))
-                .to.emit(usdc, "Transfer")
-                .withManuallyValidatedArgs(usdc, (args) => {
-                    arr.push(args);
-                })
-                .and.to.emit(defiContract, "AssetsFinalized")
-                .withManuallyValidatedArgs(defiContract, (args) => {
-                    expect(args[0].toUpperCase()).to.equal(USDC_WHALE_ADDRESS.toUpperCase());
-                    expect(args[1].toUpperCase()).to.equal(usdc.address.toUpperCase());
-                    expect(ParseUSDCNumber(args[2], 0)).to.equal(375);
-                });
-
-            expect(arr[0][0]).to.equal(defiContract.address);
-            expect(arr[0][1]).to.equal(USDC_WHALE_ADDRESS);
-            expect(ParseUSDCNumber(arr[0][2])).to.equal(375);
+            expect(rates.length).to.equal(3);
+            expect(ParseTokeRate(rates[0], 18, 8)).to.equal(0.10541956);
+            expect(ParseTokeRate(rates[1], 18, 8)).to.equal(5.25781248);
+            expect(ParseTokeRate(rates[2], 6, 6)).to.equal(5.205754); //Rate can only be as precise as the least precise token
         });
 
-        it("Using just USDC when in range", async () => {
-            const usdcBalance = 1500.234789;
+        it("Accepts and returns data when min subscribed", async () => {
+            const tokePrice = 2;
 
             await publishSupportedTokens();
+            await publishRates(tokePrice, 10, 1, 1);
+            const rates = await defiContract.connect(deployer).getRates([weth.address, dai.address, usdc.address]);
 
-            const usdcWhale = ethers.provider.getSigner(USDC_WHALE_ADDRESS);
-            await usdc.connect(usdcWhale).approve(defiContract.address, USDCAmount(usdcBalance));
-            await defiContract.connect(usdcWhale).deposit(USDCDeposit(usdcBalance), []);
-
-            const tokePrice = 8.75; //USDC Price
-
-            await publishRates(tokePrice);
-            await goToStage3(1, MaxUint256);
-            await transferToTreasury();
-
-            const arr = [];
-
-            await expect(defiContract.connect(usdcWhale).finalizeAssets(false))
-                .to.emit(usdc, "Transfer")
-                .withManuallyValidatedArgs(usdc, (args) => {
-                    arr.push(args);
-                })
-                .and.to.emit(defiContract, "AssetsFinalized")
-                .withManuallyValidatedArgs(defiContract, (args) => {
-                    expect(args[0].toUpperCase()).to.equal(USDC_WHALE_ADDRESS.toUpperCase());
-                    expect(args[1].toUpperCase()).to.equal(usdc.address.toUpperCase());
-                    expect(ParseUSDCNumber(args[2], 6)).to.equal(375.058697);
-                });
-
-            expect(arr[0][0]).to.equal(defiContract.address);
-            expect(arr[0][1]).to.equal(USDC_WHALE_ADDRESS);
-            expect(ParseUSDCNumber(arr[0][2], 6)).to.equal(375.058697);
+            expect(rates.length).to.equal(3);
+            expect(ParseTokeRate(rates[0], 18, 1)).to.equal(0.2);
+            expect(ParseTokeRate(rates[1], 18, 0)).to.equal(2);
+            expect(ParseTokeRate(rates[2], 6, 0)).to.equal(2);
         });
 
-        it("Using just ETH when over", async () => {
+        it("Accepts and returns data when max subscribed", async () => {
+            const tokePrice = 10;
+
+            await publishSupportedTokens();
+            await publishRates(tokePrice, 10, 2, 1);
+            const rates = await defiContract.connect(deployer).getRates([weth.address, dai.address, usdc.address]);
+
+            expect(rates.length).to.equal(3);
+            expect(ParseTokeRate(rates[0], 18, 0)).to.equal(1);
+            expect(ParseTokeRate(rates[1], 18, 0)).to.equal(5);
+            expect(ParseTokeRate(rates[2], 6, 0)).to.equal(10);
+        });
+
+        it("Emits a RatesPublished event", async () => {
+            await publishSupportedTokens();
+            expect(
+                await defiContract.connect(deployer).publishRates(
+                    [
+                        [weth.address, 1, 3],
+                        [dai.address, 1, 3],
+                        [usdc.address, 1, 3],
+                    ],
+                    [1, 1],
+                    1
+                )
+            ).to.emit(defiContract, "RatesPublished");
+        });
+    });
+
+    describe("Deposit", async () => {
+        it("With ETH only calculates correct account value", async () => {
             const ethAmt = 5;
 
-            await publishSupportedTokens();
+            await weth.mock.balanceOf.returns(WETHAmount(ethAmt));
+            await weth.mock.transfer.returns(true);
+            await weth.mock.transferFrom.returns(true);
+            await dai.mock.balanceOf.returns(0);
+            await usdc.mock.balanceOf.returns(0);
 
-            const wethWhale = await ethers.provider.getSigner(WETH_WHALE_ADDRESS);
-            await weth.connect(wethWhale).approve(defiContract.address, WETHAmount(ethAmt));
-            await defiContract.connect(wethWhale).deposit(WETHDeposit(ethAmt), []);
+            await publishSupportedTokens();
+            await SetUSDValuesOfTheTokens(1000, defaulUsdValueOfDai, defaulUsdValueOfUsdc);
+            await defiContract.connect(user1).deposit(WETHDeposit(ethAmt), []);
+
+            const value = await defiContract.connect(user1).accountBalance(user1.address);
+
+            expect(ParseUsdRate(value, 0)).to.equal(5000);
+        });
+
+        it("With DAI only calculates correct account value", async () => {
+            const daiAmt = 1505.99;
+
+            await weth.mock.balanceOf.returns(0);
+            await dai.mock.balanceOf.returns(DAIAmount(daiAmt));
+            await dai.mock.transfer.returns(true);
+            await dai.mock.transferFrom.returns(true);
+            await usdc.mock.balanceOf.returns(0);
+
+            await publishSupportedTokens();
+            await SetUSDValuesOfTheTokens(1000, 0.99999999, defaulUsdValueOfUsdc);
+            await defiContract.connect(user1).deposit(DAIDeposit(daiAmt), []);
+
+            const value = await defiContract.connect(user1).accountBalance(user1.address);
+
+            expect(ParseUsdRate(value, 8)).to.equal(1505.98998494);
+        });
+
+        it("With USDC only calculates correct account value", async () => {
+            const amt = 1505.736398;
+
+            await weth.mock.balanceOf.returns(0);
+            await dai.mock.balanceOf.returns(0);
+            await usdc.mock.balanceOf.returns(USDCAmount(amt));
+            await usdc.mock.transfer.returns(true);
+            await usdc.mock.transferFrom.returns(true);
+
+            await publishSupportedTokens();
+            await SetUSDValuesOfTheTokens(1000, 1, 1.01272948);
+            await defiContract.connect(user1).deposit(USDCDeposit(amt), []);
+
+            const value = await defiContract.connect(user1).accountBalance(user1.address);
+
+            expect(ParseUsdRate(value, 8)).to.equal(1524.90363936);
+        });
+
+        it("Should emit a Deposited event", async () => {
+            const ethAmt = 2.23;
+            const daiAmt = 1209.45;
+            const usdcAmt = 2376.19;
+
+            await weth.mock.balanceOf.returns(WETHAmount(ethAmt));
+            await weth.mock.transfer.returns(true);
+            await weth.mock.transferFrom.returns(true);
+            await dai.mock.balanceOf.returns(DAIAmount(daiAmt));
+            await dai.mock.transfer.returns(true);
+            await dai.mock.transferFrom.returns(true);
+            await usdc.mock.balanceOf.returns(USDCAmount(usdcAmt));
+            await usdc.mock.transfer.returns(true);
+            await usdc.mock.transferFrom.returns(true);
+
+            await publishSupportedTokens();
+            await SetUSDValuesOfTheTokens(3457.21, 1.01, 0.97);
+            expect(await defiContract.connect(deployer).deposit(USDCDeposit(usdcAmt), [])).to.emit(
+                defiContract,
+                "Deposited"
+            );
+        });
+
+        it("Should revert when attempting to withdraw 0 tokens", async () => {
+            await weth.mock.balanceOf.returns(0);
+            await weth.mock.transferFrom.returns(true);
+
+            await publishSupportedTokens();
+            await SetUSDValuesOfTheTokens(defaulUsdValueOfEth, defaulUsdValueOfUsdc, defaulUsdValueOfDai);
+
+            await publishRates(5);
+
+            await expect(defiContract.connect(user1).withdraw([weth.address, 0], false)).to.be.revertedWith(
+                "INVALID_AMOUNT"
+            );
+        });
+
+        it("Should allow user to withdraw deposited tokens", async () => {
+            const ethAmt = 1.5;
+
+            await weth.mock.balanceOf.returns(WETHAmount(ethAmt));
+            await weth.mock.transferFrom.returns(true);
+            await weth.mock.transfer.returns(true);
+            await dai.mock.balanceOf.returns(0);
+            await usdc.mock.balanceOf.returns(0);
+
+            await publishSupportedTokens();
+            await SetUSDValuesOfTheTokens(defaulUsdValueOfEth, defaulUsdValueOfUsdc, defaulUsdValueOfDai);
+
+            await defiContract.connect(user1).deposit(WETHDeposit(ethAmt), []);
+
+            await publishRates(2);
+
+            const value = await defiContract.connect(user1).accountBalance(user1.address);
+
+            expect(ParseUsdRate(value, 3)).to.equal(ethAmt * defaulUsdValueOfEth);
+
+            await defiContract.connect(user1).withdraw(WETHDeposit(ethAmt), false);
+
+            const valueAfterWithdraw = await defiContract.connect(user1).accountBalance(user1.address);
+
+            expect(ParseUsdRate(valueAfterWithdraw, 3)).to.equal(0);
+        });
+
+        it("Should allow for a partial withdrawal", async () => {});
+
+        it("Should allow for a withdrawal in Eth instead of WETH", async () => {});
+    });
+
+    describe("Withdraw", () => {
+        it("Should revert when in stage 1", async () => {
+            const ethAmt = 3;
+
+            await weth.mock.transferFrom.returns(true);
+            await weth.mock.balanceOf.returns(WETHAmount(ethAmt));
+
+            await publishSupportedTokens();
+            await SetUSDValuesOfTheTokens(defaulUsdValueOfEth, defaulUsdValueOfUsdc, defaulUsdValueOfDai);
+
+            await expect(defiContract.connect(user1).withdraw(WETHDeposit(ethAmt), false)).to.be.revertedWith(
+                "WITHDRAWS_NOT_ACCEPTED"
+            );
+        });
+
+        it("Should revert when an unsupported token is claimed", async () => {
+            const ethAmt = 3;
+
+            await weth.mock.transferFrom.returns(true);
+
+            await weth.mock.balanceOf.returns(WETHAmount(ethAmt));
+
+            await publishSupportedTokens();
+            await SetUSDValuesOfTheTokens(defaulUsdValueOfEth, defaulUsdValueOfUsdc, defaulUsdValueOfDai);
+
+            await publishRates(5);
+
+            await expect(defiContract.connect(user1).withdraw([tokeToken.address, 1], false)).to.be.revertedWith(
+                "UNSUPPORTED_TOKEN"
+            );
+        });
+
+        it("Should revert when attempting to withdraw 0 tokens", async () => {
+            await weth.mock.balanceOf.returns(0);
+            await weth.mock.transferFrom.returns(true);
+
+            await publishSupportedTokens();
+            await SetUSDValuesOfTheTokens(defaulUsdValueOfEth, defaulUsdValueOfUsdc, defaulUsdValueOfDai);
+
+            await publishRates(5);
+
+            await expect(defiContract.connect(user1).withdraw([weth.address, 0], false)).to.be.revertedWith(
+                "INVALID_AMOUNT"
+            );
+        });
+
+        it("should revert when a user withdraws more than their balance", async () => {
+            const daiAmt = 1123.3;
+
+            await dai.mock.balanceOf.returns(DAIAmount(daiAmt));
+            await dai.mock.transfer.returns(true);
+            await dai.mock.transferFrom.returns(true);
+            await weth.mock.balanceOf.returns(0);
+            await usdc.mock.balanceOf.returns(0);
+
+            await publishSupportedTokens();
+            await SetUSDValuesOfTheTokens(defaulUsdValueOfEth, defaulUsdValueOfUsdc, defaulUsdValueOfDai);
+
+            await defiContract.connect(user1).deposit(DAIDeposit(daiAmt), []);
+
+            await publishRates(5);
+
+            await expect(defiContract.connect(user1).withdraw(DAIDeposit(2000), false)).to.be.revertedWith(
+                "SafeMath: subtraction overflow"
+            );
+        });
+
+        it("Should allow user to withdraw deposited tokens", async () => {
+            const ethAmt = 1.5;
+
+            await weth.mock.balanceOf.returns(WETHAmount(ethAmt));
+            await weth.mock.transferFrom.returns(true);
+            await weth.mock.transfer.returns(true);
+            await dai.mock.balanceOf.returns(0);
+            await usdc.mock.balanceOf.returns(0);
+
+            await publishSupportedTokens();
+            await SetUSDValuesOfTheTokens(defaulUsdValueOfEth, defaulUsdValueOfUsdc, defaulUsdValueOfDai);
+
+            await defiContract.connect(user1).deposit(WETHDeposit(ethAmt), []);
+
+            await publishRates(2);
+
+            const value = await defiContract.connect(user1).accountBalance(user1.address);
+
+            expect(ParseUsdRate(value, 3)).to.equal(ethAmt * defaulUsdValueOfEth);
+
+            await defiContract.connect(user1).withdraw(WETHDeposit(ethAmt), false);
+
+            const valueAfterWithdraw = await defiContract.connect(user1).accountBalance(user1.address);
+
+            expect(ParseUsdRate(valueAfterWithdraw, 3)).to.equal(0);
+        });
+
+        it("Should allow for a partial withdrawal", async () => {
+            const usdcAmt = 1234.5;
+            const userWithdrawal = 100;
+
+            await usdc.mock.balanceOf.returns(USDCAmount(usdcAmt));
+            await usdc.mock.transferFrom.returns(true);
+            await usdc.mock.transfer.returns(true);
+            await dai.mock.balanceOf.returns(0);
+            await weth.mock.balanceOf.returns(0);
+
+            await publishSupportedTokens();
+            await SetUSDValuesOfTheTokens(defaulUsdValueOfEth, defaulUsdValueOfUsdc, defaulUsdValueOfDai);
+
+            await defiContract.connect(user1).deposit(USDCDeposit(usdcAmt), []);
+
+            await publishRates(4);
+
+            await defiContract.connect(user1).withdraw(USDCDeposit(userWithdrawal), false);
+
+            const value = await defiContract.connect(user1).accountBalance(user1.address);
+
+            expect(ParseUsdRate(value, 3)).to.equal(usdcAmt - userWithdrawal);
+        });
+
+        it("Should not allow you to deposit one token and withdraw another", async () => {
+            const usdcAmt = 1234.5;
+
+            await usdc.mock.balanceOf.returns(USDCAmount(usdcAmt));
+            await usdc.mock.transferFrom.returns(true);
+            await usdc.mock.transfer.returns(true);
+            await dai.mock.balanceOf.returns(0);
+            await weth.mock.balanceOf.returns(0);
+
+            await publishSupportedTokens();
+            await SetUSDValuesOfTheTokens(defaulUsdValueOfEth, defaulUsdValueOfUsdc, defaulUsdValueOfDai);
+
+            await defiContract.connect(user1).deposit(USDCDeposit(usdcAmt), []);
+
+            await publishRates(4);
+
+            await expect(defiContract.connect(user1).withdraw(WETHDeposit(usdcAmt), false)).to.be.revertedWith(
+                "INVALID_TOKEN"
+            );
+        });
+    });
+
+    describe("Get Total Value", async () => {
+        it("Calculates when only single coin deposited", async () => {
+            const usdcBalance = 1500;
+            const usdcValue = 1;
+
+            await weth.mock.balanceOf.returns(0);
+            await dai.mock.balanceOf.returns(0);
+            await usdc.mock.balanceOf.returns(USDCAmount(usdcBalance));
+            await usdc.mock.transfer.returns(true);
+            await usdc.mock.transferFrom.returns(true);
+
+            await publishSupportedTokens();
+            await SetUSDValuesOfTheTokens(defaulUsdValueOfEth, defaulUsdValueOfDai, usdcValue);
+            await defiContract.connect(user1).deposit(USDCDeposit(usdcBalance), []);
+
+            const totalValue = await defiContract.connect(user1).totalValue();
+
+            expect(ParseUsdRate(totalValue, 8)).to.equal(1500);
+        });
+    });
+
+    //Going to Stage 3. Purpose of this changed, need to see what is still relevant
+
+    describe("Going to Stage 2", async () => {
+        it("fails when called by not owner", async () => {
+            // pass in dummy data
+            await expect(defiContract.connect(user1).publishRates([], [1, 1], 1)).to.be.revertedWith(
+                "caller is not the owner"
+            );
+        });
+
+        it("fails if last look duration has not passed", async () => {
+            await expect(defiContract.connect(deployer).publishRates([], [1, 1], 0)).to.be.revertedWith(
+                "INVALID_DURATION"
+            );
+        });
+
+        it("fails if overNumerator is not greater than 0", async () => {
+            await expect(defiContract.connect(deployer).publishRates([], [0, 1], 2)).to.be.revertedWith(
+                "INVALID_NUMERATOR"
+            );
+        });
+
+        it("fails if overdenominator is not greater than 0", async () => {
+            await expect(defiContract.connect(deployer).publishRates([], [1, 0], 2)).to.be.revertedWith(
+                "INVALID_DENOMINATOR"
+            );
+        });
+
+        it("passes if all conditions are satisfied", async () => {
+            await defiContract.connect(deployer).publishRates([], [2, 3], 2);
+            const block = await ethers.provider.getBlock();
+
+            const currentStage = await defiContract.currentStage();
+            const lastLookExpiration = await defiContract.lastLookExpiration();
+            const [overNumerator, overDenominator] = await defiContract.overSubscriptionRate();
+
+            expect(currentStage).to.equal(1);
+            expect(lastLookExpiration).to.equal(block.number + 2);
+            expect(overNumerator).to.equal(2);
+            expect(overDenominator).to.equal(3);
+        });
+
+        it("emits a RatesPublished event", async () => {
+            expect(await defiContract.connect(deployer).publishRates([], [1, 1], 2)).to.emit(
+                defiContract,
+                "RatesPublished"
+            );
+        });
+    });
+
+    describe("Get Account Data", async () => {
+        beforeEach(async () => {
+            await publishSupportedTokens();
+        });
+        it("correctly fetches account data if there was never any deposit", async () => {
+            const accountData = await defiContract.connect(user1).getAccountData(user1.address);
+            expect(accountData.length).to.equal(3);
+            expect(accountData[0].token).to.equal(weth.address);
+            expect(accountData[1].token).to.equal(dai.address);
+            expect(accountData[2].token).to.equal(usdc.address);
+        });
+
+        it("correctly fetches account data amongst all deposits", async () => {
+            // the balance of the contract is 0
+            await dai.mock.transferFrom.returns(true);
+            await dai.mock.balanceOf.returns(0);
+
+            await usdc.mock.transferFrom.returns(true);
+            await usdc.mock.balanceOf.returns(0);
+
+            await weth.mock.transferFrom.returns(true);
+            await weth.mock.balanceOf.returns(0);
+
+            // Every token is worth $1
+            await SetUSDValuesOfTheTokens(1, 1, 1);
+
+            // token deposit value is >= minIndividualValue
+            await defiContract.connect(user1).deposit(WETHDeposit(defaultWethLimit), []);
+
+            const tokens = await defiContract.connect(user1).getAccountData(user1.address);
+            expect(tokens.length).to.equal(3);
+            expect(tokens[0].token).to.equal(weth.address);
+            expect(tokens[0].initialDeposit).to.equal(WETHAmount(defaultWethLimit));
+            expect(tokens[0].currentBalance).to.equal(WETHAmount(defaultWethLimit));
+            expect(tokens[1].token).to.equal(dai.address);
+            expect(tokens[2].token).to.equal(usdc.address);
+        });
+        it("Returns even when rates not published", async () => {
+            const ethAmt = 1.55;
+            const daiAmt = 100;
+            const usdcAmt = 200;
+
+            await weth.mock.balanceOf.returns(WETHAmount(ethAmt));
+            await weth.mock.transfer.returns(true);
+            await weth.mock.transferFrom.returns(true);
+            await dai.mock.balanceOf.returns(DAIAmount(daiAmt));
+            await dai.mock.transfer.returns(true);
+            await dai.mock.transferFrom.returns(true);
+            await usdc.mock.balanceOf.returns(USDCAmount(usdcAmt));
+            await usdc.mock.transfer.returns(true);
+            await usdc.mock.transferFrom.returns(true);
+
+            await SetUSDValuesOfTheTokens(defaulUsdValueOfEth, defaulUsdValueOfDai, defaulUsdValueOfUsdc);
+            await defiContract.connect(user1).deposit(WETHDeposit(ethAmt), []);
 
             const tokePrice = 10;
 
             await publishRates(tokePrice);
-            await goToStage3(1.5, MaxUint256); //You get to use 75% of your funds for TOKE
-            await transferToTreasury();
 
-            const arr = [];
+            const accountData = await defiContract.connect(user1).getAccountData(user1.address);
+            expect(accountData[0].token).to.be.equal(weth.address);
+            expect(ParseWethValue(accountData[0].currentBalance, 2)).to.be.equal(ethAmt);
 
-            await expect(defiContract.connect(wethWhale).finalizeAssets(false))
-                .to.emit(weth, "Transfer")
-                .withManuallyValidatedArgs(weth, (args) => {
-                    arr.push(args);
-                })
-                .and.to.emit(defiContract, "AssetsFinalized")
-                .withManuallyValidatedArgs(defiContract, (args) => {
-                    expect(args[0].toUpperCase()).to.equal(WETH_WHALE_ADDRESS.toUpperCase());
-                    expect(args[1].toUpperCase()).to.equal(weth.address.toUpperCase());
-                    expect(ParseWETHNumber(args[2], 2)).to.equal(1.25);
-                });
+            expect(accountData[1].token).to.be.equal(dai.address);
 
-            expect(arr[0][0]).to.equal(defiContract.address);
-            expect(arr[0][1]).to.equal(WETH_WHALE_ADDRESS);
-            expect(ParseWETHNumber(arr[0][2], 2)).to.equal(1.25);
+            expect(accountData[2].token).to.be.equal(usdc.address);
         });
 
-        it("Using just USDC when over", async () => {
-            const usdcBalance = 5000;
+        it("Returns effective/ineffective amounts after rates are published", async () => {
+            const ethAmt = 1.55;
+            const daiAmt = 100;
+            const usdcAmt = 200;
 
-            await publishSupportedTokens();
+            await weth.mock.balanceOf.returns(WETHAmount(ethAmt));
+            await weth.mock.transfer.returns(true);
+            await weth.mock.transferFrom.returns(true);
+            await dai.mock.balanceOf.returns(DAIAmount(daiAmt));
+            await dai.mock.transfer.returns(true);
+            await dai.mock.transferFrom.returns(true);
+            await usdc.mock.balanceOf.returns(USDCAmount(usdcAmt));
+            await usdc.mock.transfer.returns(true);
+            await usdc.mock.transferFrom.returns(true);
 
-            const usdcWhale = await ethers.provider.getSigner(USDC_WHALE_ADDRESS);
-            usdc.connect(usdcWhale).approve(defiContract.address, USDCAmount(usdcBalance));
-            await defiContract.connect(usdcWhale).deposit(USDCDeposit(usdcBalance), []);
+            await SetUSDValuesOfTheTokens(defaulUsdValueOfEth, defaulUsdValueOfDai, defaulUsdValueOfUsdc);
+            await defiContract.connect(user1).deposit(WETHDeposit(ethAmt), []);
 
             const tokePrice = 10;
 
-            await publishRates(tokePrice);
-            await goToStage3(1.5, MaxUint256); //1.5 = 1-((1.5-1)/2) = You get use 75% of your funds for TOKE
-            await transferToTreasury();
+            await publishRates(tokePrice, 0, 0, 0, 1.5);
 
-            const arr = [];
-
-            await expect(defiContract.connect(usdcWhale).finalizeAssets(false))
-                .to.emit(usdc, "Transfer")
-                .withManuallyValidatedArgs(usdc, (args) => {
-                    arr.push(args);
-                })
-                .and.to.emit(defiContract, "AssetsFinalized")
-                .withManuallyValidatedArgs(defiContract, (args) => {
-                    expect(args[0].toUpperCase()).to.equal(USDC_WHALE_ADDRESS.toUpperCase());
-                    expect(args[1].toUpperCase()).to.equal(usdc.address.toUpperCase());
-                    expect(ParseUSDCNumber(args[2], 0)).to.equal(1250);
-                });
-
-            expect(arr[0][0]).to.equal(defiContract.address);
-            expect(arr[0][1]).to.equal(USDC_WHALE_ADDRESS);
-            expect(ParseUSDCNumber(arr[0][2], 0)).to.equal(1250);
-        });
-
-        it("Is prevented when transfer to treasury hasn't occured", async () => {
-            const usdcBalance = 5000;
-
-            await publishSupportedTokens();
-
-            const usdcWhale = await ethers.provider.getSigner(USDC_WHALE_ADDRESS);
-            usdc.connect(usdcWhale).approve(defiContract.address, USDCAmount(usdcBalance));
-            await defiContract.connect(usdcWhale).deposit(USDCDeposit(usdcBalance), []);
-
-            const tokePrice = 10;
-
-            await publishRates(tokePrice);
-            await goToStage3(1.5, MaxUint256); //1.5 = 1-((1.5-1)/2) = You get use 75% of your funds for TOKE
-
-            await expect(defiContract.connect(usdcWhale).finalizeAssets(false)).to.be.revertedWith("NOT_SYSTEM_FINAL");
+            const accountData = await defiContract.connect(user1).getAccountData(user1.address);
+            expect(accountData[0].token).to.be.equal(weth.address);
+            expect(ParseWethValue(accountData[0].currentBalance, 2)).to.be.equal(ethAmt);
+            expect(ParseWethValue(accountData[0].effectiveAmt, 4)).to.be.equal(1.1625);
+            expect(ParseWethValue(accountData[0].ineffectiveAmt, 4)).to.be.equal(0.3875);
+            expect(ParseTokeValue(accountData[0].actualTokeReceived, 7)).to.be.equal(467.3424375);
         });
     });
 
-    it("Can submit ETH but get WETH during withdraw", async () => {
-        //ETH to WETH
-        const ethAmount = 4.7;
-
-        await publishSupportedTokens();
-
-        const wethWhale = await ethers.provider.getSigner(WETH_WHALE_ADDRESS);
-
-        const whaleEthBalanceBeforeDeposit = await ethers.provider.getBalance(WETH_WHALE_ADDRESS);
-
-        const contractBalanceBefore = await weth.connect(user1).balanceOf(defiContract.address);
-
-        const depositResult = await defiContract.connect(wethWhale).deposit(WETHDeposit(ethAmount), [], {
-            value: WETHAmount(ethAmount),
-        });
-        const depositReceipt = await ethers.provider.getTransactionReceipt(depositResult.hash);
-        const depositGasUsed = depositReceipt.gasUsed;
-
-        const contractBalanceAfter = await weth.connect(user1).balanceOf(defiContract.address);
-
-        expect(ParseWETHNumber(contractBalanceAfter.sub(contractBalanceBefore), 1)).to.equal(ethAmount);
-
-        const tokePrice = 10;
-
-        await publishRates(tokePrice);
-
-        const whaleWethBalanceBeforeWithdraw = await weth.connect(user1).balanceOf(WETH_WHALE_ADDRESS);
-
-        const withdrawResult = await defiContract.connect(wethWhale).withdraw(WETHDeposit(ethAmount), false);
-        const withdrawReceipt = await ethers.provider.getTransactionReceipt(withdrawResult.hash);
-        const withdrawGasUsed = withdrawReceipt.gasUsed;
-
-        const whaleEthBalanceAfterWithdraw = await ethers.provider.getBalance(WETH_WHALE_ADDRESS);
-        const whatlWethBalanceAfterWithdraw = await weth.connect(user1).balanceOf(WETH_WHALE_ADDRESS);
-
-        //Confirm withdraw didn't go back as ETH
-        expect(whaleEthBalanceBeforeDeposit.sub(WETHAmount(ethAmount))).to.be.equal(
-            whaleEthBalanceAfterWithdraw
-                .add(depositGasUsed.mul(depositResult.gasPrice))
-                .add(withdrawGasUsed.mul(withdrawResult.gasPrice))
-        );
-
-        //Confirm withdraw increased WETH balance by amount
-        expect(whaleWethBalanceBeforeWithdraw.add(WETHAmount(ethAmount))).to.be.equal(whatlWethBalanceAfterWithdraw);
-    });
-
-    describe("Full Cycle", () => {
-        it("Funds end up in treasury when in range", async () => {
-            const ethAmount = 4.7;
-            const daiAmount = 1000;
-
-            //Setup, Stage 1
+    describe("Whitelist", async () => {
+        beforeEach(async () => {
             await publishSupportedTokens();
-
-            const wethWhale = await ethers.provider.getSigner(WETH_WHALE_ADDRESS);
-            const daiWhale = await ethers.provider.getSigner(DAI_WHALE_ADDRESS);
-
-            //Approvals
-            await weth.connect(wethWhale).approve(defiContract.address, WETHAmount(ethAmount));
-            await dai.connect(daiWhale).approve(defiContract.address, DAIAmount(daiAmount));
-
-            //User Deposits
-            await defiContract.connect(wethWhale).deposit(WETHDeposit(ethAmount), []);
-            await defiContract.connect(daiWhale).deposit(DAIDeposit(daiAmount), []);
-
-            //Go to Stage 2
-            const tokePrice = 10;
-            await publishRates(tokePrice, 0, 0, 0, 1); //In Range, Last Look is 2 blocks
-
-            //One user withdraws some funds
-            await defiContract.connect(wethWhale).withdraw(WETHDeposit(2), false);
-
-            //Go to Stage 3
-            await goToStage3();
-
-            await defiContract.connect(deployer).transferToTreasury();
-
-            const wethTreasuryBalance = await weth.connect(treasury.address).balanceOf(treasury.address);
-            const daiTreasuryBalance = await dai.connect(treasury.address).balanceOf(treasury.address);
-
-            expect(wethTreasuryBalance).to.be.equal(WETHAmount(2.7));
-            expect(daiTreasuryBalance).to.be.equal(DAIAmount(daiAmount));
         });
+        it("Allows included user to deposit", async () => {
+            const ethAmt = 1.55;
 
-        it("Funds end up in treasury when oversubscribed", async () => {
-            const ethAmount = 4.7;
-            const daiAmount = 1000;
+            await weth.mock.balanceOf.returns(WETHAmount(ethAmt));
+            await weth.mock.transfer.returns(true);
+            await weth.mock.transferFrom.returns(true);
+            await dai.mock.balanceOf.returns(0);
+            await usdc.mock.balanceOf.returns(0);
 
-            //Setup, Stage 1
-            await publishSupportedTokens();
+            await SetUSDValuesOfTheTokens(defaulUsdValueOfEth, defaulUsdValueOfDai, defaulUsdValueOfUsdc);
 
-            const wethWhale = await ethers.provider.getSigner(WETH_WHALE_ADDRESS);
-            const daiWhale = await ethers.provider.getSigner(DAI_WHALE_ADDRESS);
+            const tree = new MerkleTree([ethers.utils.keccak256(user1.address)]);
+            const root = getRoot(tree);
+            await defiContract.connect(deployer).configureWhitelist([true, root]);
+            const proof = getProof(tree, ethers.utils.keccak256(user1.address));
 
-            //Approvals
-            await weth.connect(wethWhale).approve(defiContract.address, WETHAmount(ethAmount));
-            await dai.connect(daiWhale).approve(defiContract.address, DAIAmount(daiAmount));
+            await defiContract.connect(user1).deposit(WETHDeposit(ethAmt), proof);
+        });
+        it("Blocks someone from using anothers proof", async () => {
+            const ethAmt = 1.55;
 
-            //User Deposits
-            await defiContract.connect(wethWhale).deposit(WETHDeposit(ethAmount), []);
-            await defiContract.connect(daiWhale).deposit(DAIDeposit(daiAmount), []);
+            await weth.mock.balanceOf.returns(WETHAmount(ethAmt));
+            await weth.mock.transfer.returns(true);
+            await weth.mock.transferFrom.returns(true);
+            await dai.mock.balanceOf.returns(0);
+            await usdc.mock.balanceOf.returns(0);
 
-            //Go to Stage 2
-            const tokePrice = 10;
-            await publishRates(tokePrice, 0, 0, 0, 1.5); //In Range, Last Look is 2 blocks
+            await SetUSDValuesOfTheTokens(defaulUsdValueOfEth, defaulUsdValueOfDai, defaulUsdValueOfUsdc);
 
-            //One user withdraws some funds
-            await defiContract.connect(wethWhale).withdraw(WETHDeposit(2), false);
+            const user1Tree = new MerkleTree([ethers.utils.keccak256(user1.address)]);
+            const user1Root = getRoot(user1Tree);
+            await defiContract.connect(deployer).configureWhitelist([true, user1Root]);
+            const user1Proof = getProof(user1Tree, ethers.utils.keccak256(user1.address));
 
-            //Go to Stage 3
-            await goToStage3();
+            await expect(defiContract.connect(user2).deposit(WETHDeposit(ethAmt), user1Proof)).to.be.revertedWith(
+                "PROOF_INVALID"
+            );
+        });
+        it("Disabled whitelist check lets anyone through", async () => {
+            const ethAmt = 1.55;
 
-            await defiContract.connect(deployer).transferToTreasury();
+            await weth.mock.balanceOf.returns(WETHAmount(ethAmt));
+            await weth.mock.transfer.returns(true);
+            await weth.mock.transferFrom.returns(true);
+            await dai.mock.balanceOf.returns(0);
+            await usdc.mock.balanceOf.returns(0);
 
-            const wethTreasuryBalance = await weth.connect(treasury.address).balanceOf(treasury.address);
-            const daiTreasuryBalance = await dai.connect(treasury.address).balanceOf(treasury.address);
+            await SetUSDValuesOfTheTokens(defaulUsdValueOfEth, defaulUsdValueOfDai, defaulUsdValueOfUsdc);
 
-            expect(wethTreasuryBalance).to.be.equal(WETHAmount(2.025)); //2.7 left, 75% towards TOKE
-            expect(daiTreasuryBalance).to.be.equal(DAIAmount(750));
+            const user1Tree = new MerkleTree([ethers.utils.keccak256(user1.address)]);
+            const user1Root = getRoot(user1Tree);
+            await defiContract.connect(deployer).configureWhitelist([false, user1Root]);
+            const user1Proof = getProof(user1Tree, ethers.utils.keccak256(user1.address));
+
+            await expect(defiContract.connect(user2).deposit(WETHDeposit(ethAmt), user1Proof)).to.be.not.revertedWith(
+                "ROOT_NOT_ENABLED"
+            );
         });
     });
 
-    const transferToTreasury = async () => {
-        await defiContract.connect(deployer).transferToTreasury();
-    };
+    describe("Adding Supported Tokens", async () => {
+        let wethSupportedTokenData;
+        let daiSupportedTokenData;
+        let usdcSupportedTokenData;
+        let supportedTokenArray;
 
-    const goToStage3 = async () => {
-        //Default block duration is 2
-        await timeMachine.advanceBlock();
-        await timeMachine.advanceBlock();
-        await timeMachine.advanceBlock();
-    };
+        before(async () => {
+            wethSupportedTokenData = {
+                token: weth.address,
+                oracle: wethOracle.address,
+                genesis: wethGenesisPool.address,
+                maxLimit: WETHAmount(35),
+            };
+
+            daiSupportedTokenData = {
+                token: dai.address,
+                oracle: daiOracle.address,
+                genesis: daiGenesisPool.address,
+                maxLimit: DAIAmount(100000),
+            };
+
+            usdcSupportedTokenData = {
+                token: usdc.address,
+                oracle: usdcOracle.address,
+                genesis: usdcGenesisPool.address,
+                maxLimit: USDCAmount(100000),
+            };
+
+            supportedTokenArray = [wethSupportedTokenData, daiSupportedTokenData, usdcSupportedTokenData];
+        });
+
+        it("Should not allow another user to add a supported token", async () => {
+            await expect(defiContract.connect(user1).addSupportedTokens(supportedTokenArray)).to.be.revertedWith(
+                "Ownable: caller is not the owner"
+            );
+        });
+
+        it("Should allow deployer to add supported tokens", async () => {
+            await expect(defiContract.connect(deployer).addSupportedTokens(supportedTokenArray)).to.not.be.reverted;
+        });
+
+        it("Emits a SupportedTokensAdded event", async () => {
+            expect(await defiContract.connect(deployer).addSupportedTokens([])).to.emit(
+                defiContract,
+                "SupportedTokensAdded"
+            );
+        });
+    });
+
+    describe("Getting supported tokens", () => {
+        let tokens;
+        beforeEach(async () => {
+            await publishSupportedTokens();
+            tokens = await defiContract.getSupportedTokens();
+        });
+
+        it("Should return the correct token addresses", async () => {
+            expect(tokens).to.include(weth.address);
+            expect(tokens).to.include(dai.address);
+            expect(tokens).to.include(usdc.address);
+        });
+    });
+
+    describe("Getting Genesis Pools", () => {
+        let genesisPools;
+        beforeEach(async () => {
+            await publishSupportedTokens();
+            genesisPools = await defiContract.getGenesisPools([weth.address, dai.address, usdc.address]);
+        });
+
+        it("Should return the correct genesis addresses", async () => {
+            expect(genesisPools).to.include(wethGenesisPool.address);
+            expect(genesisPools).to.include(daiGenesisPool.address);
+            expect(genesisPools).to.include(usdcGenesisPool.address);
+        });
+    });
+
+    describe("Getting oracle addresses", async () => {
+        let oracles;
+        beforeEach(async () => {
+            await publishSupportedTokens();
+            oracles = await defiContract.getTokenOracles([weth.address, dai.address, usdc.address]);
+        });
+
+        it("Should return the correct oracle addresses", async () => {
+            expect(oracles).to.include(wethOracle.address);
+            expect(oracles).to.include(daiOracle.address);
+            expect(oracles).to.include(usdcOracle.address);
+        });
+    });
+
+    // const goToStage3 = async () => {
+    //   //Default block duration is 2
+    //   await timeMachine.advanceBlock();
+    //   await timeMachine.advanceBlock();
+    //   await timeMachine.advanceBlock();
+    // };
 
     const publishSupportedTokens = async (wethLimit = 0, daiLimit = 0, usdcLimit = 0) => {
         await defiContract.connect(deployer).addSupportedTokens([
@@ -894,34 +835,33 @@ describe("Test Defi-Round", () => {
         };
     };
 
-    const publishRates = async (usdTokePrice, ethPriceArg, daiPriceArg, usdcPriceArg, pctOver, lastLookDuration) => {
-        const wethRoundData = await wethOracle.connect(user1).latestRoundData();
-        const daiRoundData = await daiOracle.connect(user1).latestRoundData();
-        const usdcRoundData = await usdcOracle.connect(user1).latestRoundData();
+    const publishRates = async (usdTokePrice, ethPrice, daiPrice, usdcPrice, pctOver, lastLookDuration) => {
+        await SetUSDValuesOfTheTokens(
+            ethPrice || defaulUsdValueOfEth,
+            daiPrice || defaulUsdValueOfDai,
+            usdcPrice || defaulUsdValueOfUsdc
+        );
 
-        const ethPrice = ethPriceArg || Number(wethRoundData[1]);
-        const daiPrice = daiPriceArg || Number(daiRoundData[1]);
-        const usdcPrice = usdcPriceArg || Number(usdcRoundData[1]);
-
-        const wethRate = calculateTokeRate(ethPrice, usdTokePrice);
-        const daiRate = calculateTokeRate(daiPrice, usdTokePrice);
-        const usdcRate = calculateTokeRate(usdcPrice, usdTokePrice);
+        const wethRate = calculateTokeRate(ethPrice || defaulUsdValueOfEth, usdTokePrice);
+        const daiRate = calculateTokeRate(daiPrice || defaulUsdValueOfDai, usdTokePrice);
+        const usdcRate = calculateTokeRate(usdcPrice || defaulUsdValueOfUsdc, usdTokePrice);
 
         let pct = pctOver || defaultOversubPct;
         let duration = lastLookDuration || defaultLastLookDuration;
+
         const rate = decimalToFraction(1 - (pct - 1) / 2);
 
         await defiContract.connect(deployer).publishRates(
             [
                 //Numerator needs to be in asset precision, demoniator needs to be in TOKE precision
                 [
-                    WETH_ADDRESS,
+                    weth.address,
                     increaseBNPrecision(wethRate.numerator, 18),
                     increaseBNPrecision(wethRate.demoninator, 18),
                 ],
-                [DAI_ADDRESS, increaseBNPrecision(daiRate.numerator, 18), increaseBNPrecision(daiRate.demoninator, 18)],
+                [dai.address, increaseBNPrecision(daiRate.numerator, 18), increaseBNPrecision(daiRate.demoninator, 18)],
                 [
-                    USDC_ADDRESS,
+                    usdc.address,
                     increaseBNPrecision(usdcRate.numerator, 6),
                     increaseBNPrecision(usdcRate.demoninator, 18),
                 ],
