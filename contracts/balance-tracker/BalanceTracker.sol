@@ -3,29 +3,29 @@
 pragma solidity 0.7.6;
 pragma abicoder v2;
 
-import {OwnableUpgradeable as Ownable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/Initializable.sol";
-import "@openzeppelin/contracts/utils/EnumerableSet.sol";
+import {OwnableUpgradeable as Ownable} from '@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol';
+import '@openzeppelin/contracts/math/SafeMath.sol';
+import '@openzeppelin/contracts-upgradeable/proxy/Initializable.sol';
+import '@openzeppelin/contracts/utils/EnumerableSet.sol';
 
-import "../interfaces/IBalanceTracker.sol";
-import "../interfaces/events/BalanceUpdateEvent.sol";
-import "../interfaces/events/EventWrapper.sol";
-import "../interfaces/events/EventReceiver.sol";
-import "../interfaces/events/DelegationEnabled.sol";
-import "../interfaces/events/DelegationDisabled.sol";
+import '../interfaces/IBalanceTracker.sol';
+import '../interfaces/events/BalanceUpdateEvent.sol';
+import '../interfaces/events/EventWrapper.sol';
+import '../interfaces/events/EventReceiver.sol';
+import '../interfaces/events/DelegationEnabled.sol';
+import '../interfaces/events/DelegationDisabled.sol';
 
 contract BalanceTracker is EventReceiver, IBalanceTracker, Ownable {
     using SafeMath for uint256;
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    bytes32 public constant EVENT_TYPE_DEPOSIT = bytes32("Deposit");
-    bytes32 public constant EVENT_TYPE_TRANSFER = bytes32("Transfer");
-    bytes32 public constant EVENT_TYPE_SLASH = bytes32("Slash");
-    bytes32 public constant EVENT_TYPE_WITHDRAW = bytes32("Withdraw");
-    bytes32 public constant EVENT_TYPE_WITHDRAWALREQUEST = bytes32("Withdrawal Request");
-    bytes32 public constant EVENT_TYPE_DELEGATION_ENABLED = bytes32("DelegationEnabled");
-    bytes32 public constant EVENT_TYPE_DELEGATION_DISABLED = bytes32("DelegationDisabled");
+    bytes32 public constant EVENT_TYPE_DEPOSIT = bytes32('Deposit');
+    bytes32 public constant EVENT_TYPE_TRANSFER = bytes32('Transfer');
+    bytes32 public constant EVENT_TYPE_SLASH = bytes32('Slash');
+    bytes32 public constant EVENT_TYPE_WITHDRAW = bytes32('Withdraw');
+    bytes32 public constant EVENT_TYPE_WITHDRAWALREQUEST = bytes32('Withdrawal Request');
+    bytes32 public constant EVENT_TYPE_DELEGATION_ENABLED = bytes32('DelegationEnabled');
+    bytes32 public constant EVENT_TYPE_DELEGATION_DISABLED = bytes32('DelegationDisabled');
 
     // user account address -> token address -> balance
     mapping(address => mapping(address => TokenBalance)) public accountTokenBalances;
@@ -99,8 +99,8 @@ contract BalanceTracker is EventReceiver, IBalanceTracker, Ownable {
         uint256 amount,
         bool stateSync
     ) private {
-        require(token != address(0), "INVALID_TOKEN_ADDRESS");
-        require(account != address(0), "INVALID_ACCOUNT_ADDRESS");
+        require(token != address(0), 'INVALID_TOKEN_ADDRESS');
+        require(account != address(0), 'INVALID_ACCOUNT_ADDRESS');
 
         TokenBalance memory userTokenBalance = accountTokenBalances[account][token];
 
@@ -150,14 +150,14 @@ contract BalanceTracker is EventReceiver, IBalanceTracker, Ownable {
         address from,
         address to
     ) private {
-        require(from != address(0), "INVALID_FROM");
-        require(token != address(0), "INVALID_TOKEN");
-        require(from != to, "NO_SELF");
-        require(delegatedTo[to] == address(0), "ALREADY_DELEGATOR");
+        require(from != address(0), 'INVALID_FROM');
+        require(token != address(0), 'INVALID_TOKEN');
+        require(from != to, 'NO_SELF');
+        require(delegatedTo[to] == address(0), 'ALREADY_DELEGATOR');
 
         // This line only protects when paired with the DelegateFunction contract
         // Should we send events from another source we need to be aware
-        require(delegatedBalance[from][token] == 0, "ALREADY_DELEGATEE");
+        require(delegatedBalance[from][token] == 0, 'ALREADY_DELEGATEE');
 
         TokenBalance memory balanceToTransfer = accountTokenBalances[from][token];
 
@@ -188,7 +188,7 @@ contract BalanceTracker is EventReceiver, IBalanceTracker, Ownable {
         bytes32 functionId
     ) private {
         // so far, only vote delegtion impacts BalanceTracker
-        if (functionId == "voting") {
+        if (functionId == 'voting') {
             uint256 length = supportedTokenAddresses.length();
             for (uint256 i = 0; i < length; ++i) {
                 address token = supportedTokenAddresses.at(i);
@@ -214,26 +214,26 @@ contract BalanceTracker is EventReceiver, IBalanceTracker, Ownable {
     }
 
     function addSupportedTokens(address[] calldata tokensToSupport) external override onlyOwner {
-        require(tokensToSupport.length > 0, "NO_TOKENS");
+        require(tokensToSupport.length > 0, 'NO_TOKENS');
 
         for (uint256 i = 0; i < tokensToSupport.length; ++i) {
-            require(tokensToSupport[i] != address(0), "ZERO_ADDRESS");
+            require(tokensToSupport[i] != address(0), 'ZERO_ADDRESS');
 
             // Re-adding a previously removed token will lead to incorrect balances
-            require(!supportedTokenRemoved[tokensToSupport[i]], "TOKEN_WAS_REMOVED");
+            require(!supportedTokenRemoved[tokensToSupport[i]], 'TOKEN_WAS_REMOVED');
 
-            require(supportedTokenAddresses.add(tokensToSupport[i]), "ADD_FAIL");
+            require(supportedTokenAddresses.add(tokensToSupport[i]), 'ADD_FAIL');
         }
         emit SupportedTokensAdded(tokensToSupport);
     }
 
     function removeSupportedTokens(address[] calldata tokensToSupport) external override onlyOwner {
-        require(tokensToSupport.length > 0, "NO_TOKENS");
+        require(tokensToSupport.length > 0, 'NO_TOKENS');
 
         for (uint256 i = 0; i < tokensToSupport.length; ++i) {
-            require(tokensToSupport[i] != address(0), "ZERO_ADDRESS");
+            require(tokensToSupport[i] != address(0), 'ZERO_ADDRESS');
 
-            require(supportedTokenAddresses.remove(tokensToSupport[i]), "REMOVE_FAIL");
+            require(supportedTokenAddresses.remove(tokensToSupport[i]), 'REMOVE_FAIL');
             supportedTokenRemoved[tokensToSupport[i]] = true;
         }
         emit SupportedTokensRemoved(tokensToSupport);
@@ -288,7 +288,7 @@ contract BalanceTracker is EventReceiver, IBalanceTracker, Ownable {
         } else if (eventType == EVENT_TYPE_DELEGATION_DISABLED) {
             _onDelegationDisabled(data);
         } else {
-            revert("INVALID_EVENT_TYPE");
+            revert('INVALID_EVENT_TYPE');
         }
     }
 }
