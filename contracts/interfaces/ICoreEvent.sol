@@ -3,16 +3,15 @@ pragma solidity 0.6.11;
 pragma experimental ABIEncoderV2;
 
 interface ICoreEvent {
-
     struct SupportedTokenData {
-        address token;        
-        uint256 maxUserLimit;        
+        address token;
+        uint256 maxUserLimit;
         bool systemFinalized; // Whether or not the system is done setting rates, doing transfers, for this token
     }
 
     struct DurationInfo {
-        uint256 startingBlock;        
-        uint256 blockDuration;  // Block duration of the deposit/withdraw stage
+        uint256 startingBlock;
+        uint256 blockDuration; // Block duration of the deposit/withdraw stage
     }
 
     struct RateData {
@@ -21,7 +20,7 @@ interface ICoreEvent {
         uint256 tokeDenominator;
         uint256 overNumerator;
         uint256 overDenominator;
-        address pool; 
+        address pool;
     }
 
     struct TokenData {
@@ -30,7 +29,7 @@ interface ICoreEvent {
     }
 
     struct AccountData {
-        address token; // Address of the allowed token deposited        
+        address token; // Address of the allowed token deposited
         uint256 depositedBalance;
         bool finalized; // Has the user either taken their refund or sent to farming. Will not be set on swapped but undersubscribed tokens.
     }
@@ -41,8 +40,8 @@ interface ICoreEvent {
         uint256 refunded;
     }
 
-     struct TokenFarming {
-        address token; // address of the allowed token deposited        
+    struct TokenFarming {
+        address token; // address of the allowed token deposited
         bool sendToFarming; // Refund is default
     }
 
@@ -52,20 +51,20 @@ interface ICoreEvent {
     }
 
     event SupportedTokensAdded(SupportedTokenData[] tokenData);
-    event TreasurySet(address treasury);    
+    event TreasurySet(address treasury);
     event DurationSet(DurationInfo duration);
     event DurationIncreased(DurationInfo duration);
     event Deposited(address depositor, TokenData[] tokenInfo);
-    event Withdrawn(address withdrawer, TokenData[] tokenInfo);    
-    event RatesPublished(RateData[] ratesData);    
+    event Withdrawn(address withdrawer, TokenData[] tokenInfo);
+    event RatesPublished(RateData[] ratesData);
     event AssetsFinalized(address user, FinalizedAccountData[] data);
     event TreasuryTransfer(TokenData[] tokens);
-    event WhitelistConfigured(WhitelistSettings settings); 
+    event WhitelistConfigured(WhitelistSettings settings);
     event SetNoSwap(address[] tokens);
 
     //==========================================
     // Initial setup operations
-    //==========================================    
+    //==========================================
 
     /// @notice Enable or disable the whitelist
     /// @param settings The root to use and whether to check the whitelist at all
@@ -103,7 +102,7 @@ interface ICoreEvent {
     //==========================================
 
     /// @notice once the expected duration has passed, publish the Toke and over subscription rates
-    /// @notice tokens which do not have a published rate will have their users forced to withdraw all funds    
+    /// @notice tokens which do not have a published rate will have their users forced to withdraw all funds
     /// @dev pass a tokeNumerator of 0 to delete a set rate
     /// @dev Cannot be called for a token once transferToTreasury/setNoSwap has been called for that token
     function setRates(RateData[] calldata rates) external;
@@ -117,7 +116,7 @@ interface ICoreEvent {
     /// @dev complement to transferToTreasury which is for tokens that will be swapped, this one for ones that won't
     function setNoSwap(address[] calldata tokens) external;
 
-    //==========================================    
+    //==========================================
     // Stage 2 operations
     //==========================================
 
@@ -131,9 +130,16 @@ interface ICoreEvent {
 
     /// @notice Breaks down the balance according to the published rates
     /// @dev only callable after rates have been set
-    function getRateAdjustedAmounts(uint256 balance, address token) external view returns (uint256 effectiveAmt, uint256 ineffectiveAmt, uint256 actualReceived);
+    function getRateAdjustedAmounts(uint256 balance, address token)
+        external
+        view
+        returns (
+            uint256 effectiveAmt,
+            uint256 ineffectiveAmt,
+            uint256 actualReceived
+        );
 
-    /// @notice return the published rates for the tokens    
+    /// @notice return the published rates for the tokens
     /// @return rates an array of rates for the provided tokens
     function getRates() external view returns (RateData[] memory rates);
 
@@ -144,6 +150,8 @@ interface ICoreEvent {
 
     /// @notice get all tokens currently supported by the contract
     /// @return supportedTokensArray an array of supported token structs
-    function getSupportedTokens() external view returns (SupportedTokenData[] memory supportedTokensArray);
-
+    function getSupportedTokens()
+        external
+        view
+        returns (SupportedTokenData[] memory supportedTokensArray);
 }

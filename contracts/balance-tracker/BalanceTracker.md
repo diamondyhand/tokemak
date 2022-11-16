@@ -1,5 +1,6 @@
 # 🚩 BalanceTracker
 
+Accounts for every balance the user has in the Pools and the Staking contracts. It is used to support the Vote Tracker in determining voting power.
 ## Description: 
 _delegate function permits delegation of balances to account whos balance has not been properly initialized.
 
