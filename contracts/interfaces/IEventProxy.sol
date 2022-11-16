@@ -3,7 +3,7 @@
 pragma solidity >=0.6.11;
 pragma experimental ABIEncoderV2;
 
-import "../fxPortal/IFxMessageProcessor.sol";
+import '../fxPortal/IFxMessageProcessor.sol';
 
 /**
  *  @title Used to route events coming from the State Sender system.
