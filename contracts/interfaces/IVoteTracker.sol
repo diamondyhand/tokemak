@@ -3,10 +3,10 @@
 pragma solidity 0.7.6;
 pragma abicoder v2;
 
-import "./events/IEventReceiver.sol";
-import "./structs/TokenBalance.sol";
-import "./structs/UserVotePayload.sol";
-import "./structs/Signature.sol";
+import './events/IEventReceiver.sol';
+import './structs/TokenBalance.sol';
+import './structs/UserVotePayload.sol';
+import './structs/Signature.sol';
 
 /**
  *  @title Track and tally votes made to reactors, exchanges, pairs, etc.
