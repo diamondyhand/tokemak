@@ -4,24 +4,25 @@
 pragma solidity 0.7.6;
 pragma abicoder v2;
 
-import "../interfaces/IVoteTracker.sol";
-import "../interfaces/IBalanceTracker.sol";
+import '../interfaces/IVoteTracker.sol';
+import '../interfaces/IBalanceTracker.sol';
 
-import "../interfaces/events/EventWrapper.sol";
-import "../interfaces/events/CycleRolloverEvent.sol";
-import "../interfaces/events/BalanceUpdateEvent.sol";
-import "../interfaces/events/DelegationEnabled.sol";
-import "../interfaces/events/DelegationDisabled.sol";
+import '../interfaces/events/EventWrapper.sol';
+import '../interfaces/events/CycleRolloverEvent.sol';
+import '../interfaces/events/BalanceUpdateEvent.sol';
+import '../interfaces/events/DelegationEnabled.sol';
+import '../interfaces/events/DelegationDisabled.sol';
 
-import "@openzeppelin/contracts/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/utils/EnumerableSet.sol";
-import "@openzeppelin/contracts/math/Math.sol";
-import {PausableUpgradeable as Pausable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import {OwnableUpgradeable as Ownable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/Initializable.sol";
-import "../interfaces/events/EventReceiver.sol";
-import "../interfaces/structs/UserVotePayload.sol";
+import '@openzeppelin/contracts/cryptography/ECDSA.sol';
+import '@openzeppelin/contracts/math/SafeMath.sol';
+import '@openzeppelin/contracts/utils/EnumerableSet.sol';
+import '@openzeppelin/contracts/math/Math.sol';
+import {PausableUpgradeable as Pausable} from '@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol';
+import {OwnableUpgradeable as Ownable} from '@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol';
+import '@openzeppelin/contracts-upgradeable/proxy/Initializable.sol';
+import '../interfaces/events/EventReceiver.sol';
+import '../interfaces/structs/UserVotePayload.sol';
+import 'hardhat/console.sol';
 
 // solhint-disable var-name-mixedcase
 contract VoteTracker is Initializable, EventReceiver, IVoteTracker, Ownable, Pausable {
@@ -33,33 +34,33 @@ contract VoteTracker is Initializable, EventReceiver, IVoteTracker, Ownable, Pau
     uint256 public constant ONE_WITH_EIGHTEEN_PRECISION = 1_000_000_000_000_000_000;
 
     /// @dev EIP191 header for EIP712 prefix
-    string public constant EIP191_HEADER = "\x19\x01";
+    string public constant EIP191_HEADER = '\x19\x01';
 
     bytes32 public immutable EIP712_DOMAIN_TYPEHASH =
         keccak256(
-            "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+            'EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)'
         );
 
     bytes32 public immutable USER_VOTE_PAYLOAD_TYPEHASH =
         keccak256(
-            "UserVotePayload(address account,bytes32 voteSessionKey,uint256 nonce,uint256 chainId,uint256 totalVotes,UserVoteAllocationItem[] allocations)UserVoteAllocationItem(bytes32 reactorKey,uint256 amount)"
+            'UserVotePayload(address account,bytes32 voteSessionKey,uint256 nonce,uint256 chainId,uint256 totalVotes,UserVoteAllocationItem[] allocations)UserVoteAllocationItem(bytes32 reactorKey,uint256 amount)'
         );
 
     bytes32 public immutable USER_VOTE_ALLOCATION_ITEM_TYPEHASH =
-        keccak256("UserVoteAllocationItem(bytes32 reactorKey,uint256 amount)");
+        keccak256('UserVoteAllocationItem(bytes32 reactorKey,uint256 amount)');
 
-    bytes32 public immutable DOMAIN_NAME = keccak256("Tokemak Voting");
-    bytes32 public immutable DOMAIN_VERSION = keccak256("1");
+    bytes32 public immutable DOMAIN_NAME = keccak256('Tokemak Voting');
+    bytes32 public immutable DOMAIN_VERSION = keccak256('1');
 
-    bytes32 public constant EVENT_TYPE_DEPOSIT = bytes32("Deposit");
-    bytes32 public constant EVENT_TYPE_TRANSFER = bytes32("Transfer");
-    bytes32 public constant EVENT_TYPE_SLASH = bytes32("Slash");
-    bytes32 public constant EVENT_TYPE_WITHDRAW = bytes32("Withdraw");
-    bytes32 public constant EVENT_TYPE_CYCLECOMPLETE = bytes32("Cycle Complete");
-    bytes32 public constant EVENT_TYPE_VOTE = bytes32("Vote");
-    bytes32 public constant EVENT_TYPE_WITHDRAWALREQUEST = bytes32("Withdrawal Request");
-    bytes32 public constant EVENT_TYPE_DELEGATIONENABLED = bytes32("DelegationEnabled");
-    bytes32 public constant EVENT_TYPE_DELEGATIONDISABLED = bytes32("DelegationDisabled");
+    bytes32 public constant EVENT_TYPE_DEPOSIT = bytes32('Deposit');
+    bytes32 public constant EVENT_TYPE_TRANSFER = bytes32('Transfer');
+    bytes32 public constant EVENT_TYPE_SLASH = bytes32('Slash');
+    bytes32 public constant EVENT_TYPE_WITHDRAW = bytes32('Withdraw');
+    bytes32 public constant EVENT_TYPE_CYCLECOMPLETE = bytes32('Cycle Complete');
+    bytes32 public constant EVENT_TYPE_VOTE = bytes32('Vote');
+    bytes32 public constant EVENT_TYPE_WITHDRAWALREQUEST = bytes32('Withdrawal Request');
+    bytes32 public constant EVENT_TYPE_DELEGATIONENABLED = bytes32('DelegationEnabled');
+    bytes32 public constant EVENT_TYPE_DELEGATIONDISABLED = bytes32('DelegationDisabled');
 
     //Normally these would only be generated during construction against the current chain id
     //However, our users will be signing while connected to mainnet so we'll need a diff
@@ -105,8 +106,8 @@ contract VoteTracker is Initializable, EventReceiver, IVoteTracker, Ownable, Pau
         uint256 signingOnChain,
         VoteTokenMultipler[] memory voteTokens
     ) public initializer {
-        require(initialVoteSession.length > 0, "INVALID_SESSION_KEY");
-        require(voteTokens.length > 0, "NO_VOTE_TOKENS");
+        require(initialVoteSession.length > 0, 'INVALID_SESSION_KEY');
+        require(voteTokens.length > 0, 'NO_VOTE_TOKENS');
 
         __Ownable_init_unchained();
         __Pausable_init_unchained();
@@ -133,7 +134,7 @@ contract VoteTracker is Initializable, EventReceiver, IVoteTracker, Ownable, Pau
     {
         uint256 domainChain = _getChainID();
 
-        require(domainChain == userVotePayload.chainId, "INVALID_PAYLOAD_CHAIN");
+        require(domainChain == userVotePayload.chainId, 'INVALID_PAYLOAD_CHAIN');
 
         // Rate limiting when using our proxy apis
         // Users can only submit every X blocks
@@ -141,7 +142,7 @@ contract VoteTracker is Initializable, EventReceiver, IVoteTracker, Ownable, Pau
             require(
                 lastUserProxyVoteBlock[userVotePayload.account].add(settings.voteEveryBlockLimit) <
                     block.number,
-                "TOO_FREQUENT_VOTING"
+                'TOO_FREQUENT_VOTING'
             );
             lastUserProxyVoteBlock[userVotePayload.account] = block.number;
             domainChain = currentSigningChainId;
@@ -150,14 +151,14 @@ contract VoteTracker is Initializable, EventReceiver, IVoteTracker, Ownable, Pau
         // Validate the signer is the account the votes are on behalf of
         address signatureSigner = _hash(domainChain, userVotePayload, signature.signatureType)
             .recover(signature.v, signature.r, signature.s);
-        require(signatureSigner == userVotePayload.account, "MISMATCH_SIGNER");
+        require(signatureSigner == userVotePayload.account, 'MISMATCH_SIGNER');
 
         _vote(userVotePayload);
     }
 
     function voteDirect(UserVotePayload memory userVotePayload) external override whenNotPaused {
-        require(msg.sender == userVotePayload.account, "MUST_BE_SENDER");
-        require(userVotePayload.chainId == networkSettings.chainId, "INVALID_PAYLOAD_CHAIN");
+        require(msg.sender == userVotePayload.account, 'MUST_BE_SENDER');
+        require(userVotePayload.chainId == networkSettings.chainId, 'INVALID_PAYLOAD_CHAIN');
 
         _vote(userVotePayload);
     }
@@ -168,8 +169,8 @@ contract VoteTracker is Initializable, EventReceiver, IVoteTracker, Ownable, Pau
     function updateUserVoteTotals(address[] memory accounts) public override {
         for (uint256 i = 0; i < accounts.length; ++i) {
             address account = accounts[i];
-            require(account != address(0), "INVALID_ADDRESS");
-            
+            require(account != address(0), 'INVALID_ADDRESS');
+
             uint256 maxAvailableVotes = getMaxVoteBalance(account);
             bytes32[] memory keys = userVoteKeys[account];
             uint256 maxVotesToUse = Math.min(
@@ -314,10 +315,10 @@ contract VoteTracker is Initializable, EventReceiver, IVoteTracker, Ownable, Pau
 
         for (uint256 i = 0; i < length; ++i) {
             if (allowed) {
-                require(allowedreactorKeys.add(reactorKeys[i].key), "ADD_FAIL");
+                require(allowedreactorKeys.add(reactorKeys[i].key), 'ADD_FAIL');
                 placementTokens[reactorKeys[i].key] = reactorKeys[i].token;
             } else {
-                require(allowedreactorKeys.remove(reactorKeys[i].key), "REMOVE_FAIL");
+                require(allowedreactorKeys.remove(reactorKeys[i].key), 'REMOVE_FAIL');
                 delete placementTokens[reactorKeys[i].key];
             }
         }
@@ -337,8 +338,8 @@ contract VoteTracker is Initializable, EventReceiver, IVoteTracker, Ownable, Pau
         }
 
         for (uint256 i = 0; i < multipliers.length; ++i) {
-            require(multipliers[i].multiplier > 0, "MULTIPLIER_MUST_EXIST");
-            require(voteMultipliers[multipliers[i].token] == 0, "ALREADY_EXISTS");
+            require(multipliers[i].multiplier > 0, 'MULTIPLIER_MUST_EXIST');
+            require(voteMultipliers[multipliers[i].token] == 0, 'ALREADY_EXISTS');
 
             voteMultipliers[multipliers[i].token] = multipliers[i].multiplier;
             votingTokens.push(multipliers[i].token);
@@ -404,7 +405,7 @@ contract VoteTracker is Initializable, EventReceiver, IVoteTracker, Ownable, Pau
         } else if (eventType == EVENT_TYPE_DELEGATIONDISABLED) {
             _delegationVoteTotalUpdate(data, eventType);
         } else {
-            revert("INVALID_EVENT_TYPE");
+            revert('INVALID_EVENT_TYPE');
         }
     }
 
@@ -424,9 +425,9 @@ contract VoteTracker is Initializable, EventReceiver, IVoteTracker, Ownable, Pau
 
         require(
             settings.voteSessionKey == userVotePayload.voteSessionKey,
-            "NOT_CURRENT_VOTE_SESSION"
+            'NOT_CURRENT_VOTE_SESSION'
         );
-        require(userNonces[account] == userVotePayload.nonce, "INVALID_NONCE");
+        require(userNonces[account] == userVotePayload.nonce, 'INVALID_NONCE');
 
         // Ensure the message cannot be replayed
         userNonces[userVotePayload.account] = userNonces[userVotePayload.account].add(1);
@@ -436,7 +437,7 @@ contract VoteTracker is Initializable, EventReceiver, IVoteTracker, Ownable, Pau
             uint256 amount = userVotePayload.allocations[i].amount;
 
             //Ensure where they are voting is allowed
-            require(allowedreactorKeys.contains(reactorKey), "PLACEMENT_NOT_ALLOWED");
+            require(allowedreactorKeys.contains(reactorKey), 'PLACEMENT_NOT_ALLOWED');
 
             // check if user has already voted for this reactor
             if (userVoteItems[account][reactorKey] > 0) {
@@ -469,10 +470,10 @@ contract VoteTracker is Initializable, EventReceiver, IVoteTracker, Ownable, Pau
             }
         }
 
-        require(totalUsedVotes == userVotePayload.totalVotes, "VOTE_TOTAL_MISMATCH");
+        require(totalUsedVotes == userVotePayload.totalVotes, 'VOTE_TOTAL_MISMATCH');
 
         uint256 totalAvailableVotes = getMaxVoteBalance(account);
-        require(totalUsedVotes <= totalAvailableVotes, "NOT_ENOUGH_VOTES");
+        require(totalUsedVotes <= totalAvailableVotes, 'NOT_ENOUGH_VOTES');
 
         //Update users aggregation details
         userVoteDetails[account] = UserVoteDetails({
@@ -499,7 +500,7 @@ contract VoteTracker is Initializable, EventReceiver, IVoteTracker, Ownable, Pau
 
         uint256 domainChain = _getChainID();
 
-        require(domainChain == userVotePayload.chainId, "INVALID_PAYLOAD_CHAIN");
+        require(domainChain == userVotePayload.chainId, 'INVALID_PAYLOAD_CHAIN');
         _vote(userVotePayload);
     }
 
@@ -537,18 +538,18 @@ contract VoteTracker is Initializable, EventReceiver, IVoteTracker, Ownable, Pau
     function _delegationVoteTotalUpdate(bytes calldata data, bytes32 eventType) private {
         DelegationEnabled memory e = abi.decode(data, (DelegationEnabled));
 
-        if(e.functionId == "voting") {
-          address delegator = e.from;
-          address [] memory accounts = new address[](2);
-          accounts[0] = e.to;
-          accounts[1] = delegator;
-          updateUserVoteTotals(accounts);
+        if (e.functionId == 'voting') {
+            address delegator = e.from;
+            address[] memory accounts = new address[](2);
+            accounts[0] = e.to;
+            accounts[1] = delegator;
+            updateUserVoteTotals(accounts);
 
-          if(eventType == EVENT_TYPE_DELEGATIONENABLED) {
-            emit DelegatorUpdate(delegator, true);
-          } else {
-            emit DelegatorUpdate(delegator, false);
-          }
+            if (eventType == EVENT_TYPE_DELEGATIONENABLED) {
+                emit DelegatorUpdate(delegator, true);
+            } else {
+                emit DelegatorUpdate(delegator, false);
+            }
         }
     }
 
