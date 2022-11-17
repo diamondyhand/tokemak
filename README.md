@@ -1,9 +1,9 @@
-# tokemak-smart-contracts-public
+# 🚩 Tokemak Smart Contracts
 A public repo of Tokemak's currently deployed contracts.
 
-# Mainnet
+# Mainnet 🔧
 
-## Important Addresses
+## Important Addresses 🔧
 
 - Deployer Address - `0x9e0bcE7ec474B481492610eB9dd5D69EB03718D5`
 - TOKE Contract - `0x2e9d63788249371f1DFC918a52f8d799F4a38C94`
@@ -33,7 +33,7 @@ A public repo of Tokemak's currently deployed contracts.
 - Delegate Function - `0x3bc59A43d82C1acF3a597652eaDD3a02082D3671`
   - Implementation - `0xC8e257930D4f0A455A09Bf8D189ed588d344da8a`
 
-### Reactors
+### Reactors 🔧
 
 - WETH - `0xD3D13a578a53685B4ac36A1Bab31912D2B2A2F36`
   - Implementation - `0xb104A7fA1041168556218DDb40Fe2516F88246d5`
@@ -71,7 +71,7 @@ If not otherwise specified
 - Implementation - `0xd899ac9283a44533c36BC8373F5c898b0d5fC03E`
 - Admin - `0xc89F742452F534EcE603C7B62dF76102AAcF00Df`
 
-### Controllers
+### Controllers 🔧
 
 - Curve 2 - `0xE301a3FC14a9A236A5FB66B03E255C49AB95849D`
 - Curve 3 - `0xdf9C664D28E216eAEFf94B7D5361F2a86eAa30b8`
@@ -83,7 +83,7 @@ If not otherwise specified
 - WETH Wrap - `0x3eb1B58DBe245b89C8494b8cff42B8DdbAdc0A23`
 - Curve V1 ETH - `0x9fE6086C5e0648b101DACf73B6c7d26E39A569D2`
 
-### Curve Pools
+### Curve Pools 🔧
 
 - tGAMMA/GAMMA - `0x9462F2b3C9bEeA8afc334Cdb1D1382B072e494eA`
 - tSNX/SNX - `0x50B0D9171160d6EB8Aa39E090Da51E7e078E81c4`
@@ -102,7 +102,7 @@ If not otherwise specified
 
 # Polygon
 
-## Important Addresses
+## Important Addresses 🔧
 
 - Deployer Address - `0x9e0bcE7ec474B481492610eB9dd5D69EB03718D5`
 - Event Proxy - `0x7f4fb56b9C85bAB8b89C8879A660f7eAAa95a3A8`
