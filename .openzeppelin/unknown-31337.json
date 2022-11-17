@@ -547,7 +547,7 @@
     },
     {
       "address": "0x68B1D87F95878fE05B998F19b66F4baba5De1aed",
-      "txHash": "0x0fb790051d6bd9ba40f2094e97ee4cdb58a7b3145a5eb4c7ad13561aba550826",
+      "txHash": "0x20e759b78a1003dd43b7730eff4832a5f79e64afd20701c10d56a6872fbc31ff",
       "kind": "transparent"
     },
     {
@@ -727,7 +727,7 @@
     },
     {
       "address": "0x8B190573374637f144AC8D37375d97fd84cBD3a0",
-      "txHash": "0x24929ee80401e6eb0108ebbd67c51c6cea5578b99da6d1bfb2a7e9452f414973",
+      "txHash": "0xadfbdf299730ac2655a9ba12c267531afd02382699e09edcc8953303687177c2",
       "kind": "transparent"
     },
     {
