@@ -3,7 +3,7 @@
 pragma solidity >=0.6.11;
 pragma experimental ABIEncoderV2;
 
-import "./Destinations.sol";
+import './Destinations.sol';
 
 interface IEventSender {
     event DestinationsSet(address fxStateSender, address destinationOnL2);

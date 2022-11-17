@@ -76,11 +76,15 @@ interface IWETHInterface extends ethers.utils.Interface {
 
   events: {
     "Approval(address,address,uint256)": EventFragment;
+    "Deposit(address,uint256)": EventFragment;
     "Transfer(address,address,uint256)": EventFragment;
+    "Withdrawal(address,uint256)": EventFragment;
   };
 
   getEvent(nameOrSignatureOrTopic: "Approval"): EventFragment;
+  getEvent(nameOrSignatureOrTopic: "Deposit"): EventFragment;
   getEvent(nameOrSignatureOrTopic: "Transfer"): EventFragment;
+  getEvent(nameOrSignatureOrTopic: "Withdrawal"): EventFragment;
 }
 
 export type ApprovalEvent = TypedEvent<
@@ -91,8 +95,16 @@ export type ApprovalEvent = TypedEvent<
   }
 >;
 
+export type DepositEvent = TypedEvent<
+  [string, BigNumber] & { arg0: string; arg1: BigNumber }
+>;
+
 export type TransferEvent = TypedEvent<
   [string, string, BigNumber] & { from: string; to: string; value: BigNumber }
+>;
+
+export type WithdrawalEvent = TypedEvent<
+  [string, BigNumber] & { arg0: string; arg1: BigNumber }
 >;
 
 export class IWETH extends BaseContract {
@@ -173,7 +185,7 @@ export class IWETH extends BaseContract {
     ): Promise<ContractTransaction>;
 
     withdraw(
-      amount: BigNumberish,
+      arg0: BigNumberish,
       overrides?: Overrides & { from?: string | Promise<string> }
     ): Promise<ContractTransaction>;
   };
@@ -212,7 +224,7 @@ export class IWETH extends BaseContract {
   ): Promise<ContractTransaction>;
 
   withdraw(
-    amount: BigNumberish,
+    arg0: BigNumberish,
     overrides?: Overrides & { from?: string | Promise<string> }
   ): Promise<ContractTransaction>;
 
@@ -248,7 +260,7 @@ export class IWETH extends BaseContract {
       overrides?: CallOverrides
     ): Promise<boolean>;
 
-    withdraw(amount: BigNumberish, overrides?: CallOverrides): Promise<void>;
+    withdraw(arg0: BigNumberish, overrides?: CallOverrides): Promise<void>;
   };
 
   filters: {
@@ -270,6 +282,16 @@ export class IWETH extends BaseContract {
       { owner: string; spender: string; value: BigNumber }
     >;
 
+    "Deposit(address,uint256)"(
+      undefined?: null,
+      undefined?: null
+    ): TypedEventFilter<[string, BigNumber], { arg0: string; arg1: BigNumber }>;
+
+    Deposit(
+      undefined?: null,
+      undefined?: null
+    ): TypedEventFilter<[string, BigNumber], { arg0: string; arg1: BigNumber }>;
+
     "Transfer(address,address,uint256)"(
       from?: string | null,
       to?: string | null,
@@ -287,6 +309,16 @@ export class IWETH extends BaseContract {
       [string, string, BigNumber],
       { from: string; to: string; value: BigNumber }
     >;
+
+    "Withdrawal(address,uint256)"(
+      undefined?: null,
+      undefined?: null
+    ): TypedEventFilter<[string, BigNumber], { arg0: string; arg1: BigNumber }>;
+
+    Withdrawal(
+      undefined?: null,
+      undefined?: null
+    ): TypedEventFilter<[string, BigNumber], { arg0: string; arg1: BigNumber }>;
   };
 
   estimateGas: {
@@ -324,7 +356,7 @@ export class IWETH extends BaseContract {
     ): Promise<BigNumber>;
 
     withdraw(
-      amount: BigNumberish,
+      arg0: BigNumberish,
       overrides?: Overrides & { from?: string | Promise<string> }
     ): Promise<BigNumber>;
   };
@@ -367,7 +399,7 @@ export class IWETH extends BaseContract {
     ): Promise<PopulatedTransaction>;
 
     withdraw(
-      amount: BigNumberish,
+      arg0: BigNumberish,
       overrides?: Overrides & { from?: string | Promise<string> }
     ): Promise<PopulatedTransaction>;
   };
