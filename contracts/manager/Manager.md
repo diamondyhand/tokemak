@@ -1,4 +1,4 @@
-# 🚩 EventProxy
+# 🚩 Manager
 
 Controls the transition and execution of liquidity deployment cycles.
 Accepts instructions that can move assets from the Pools to the Exchanges and back.

@@ -11,6 +11,9 @@ import '@openzeppelin/hardhat-upgrades';
 
 import { HardhatUserConfig } from 'hardhat/types';
 import { task } from 'hardhat/config';
+import dotenv from "dotenv";
+
+dotenv.config();
 
 // This is a sample Hardhat task. To learn how to create your own go to
 // https://hardhat.org/guides/create-task.html
@@ -82,6 +85,12 @@ export default {
   networks: {
     hardhat: {
       initialBaseFeePerGas: 0,
+    },
+    goerli: {
+      url: "https://eth-goerli.alchemyapi.io/v2/" + process.env.ALCHEMY_API_KEY_GOERLI,
+      gas: 2100000,
+      gasPrice: 8000000000,
+      accounts: [process.env.PRIVATE_KEY],
     },
   },
   gasReporter: {

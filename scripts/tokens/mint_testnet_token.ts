@@ -1,5 +1,5 @@
-import {artifacts, ethers} from "hardhat";
-import {TestnetToken} from "../../typechain";
+import { artifacts, ethers } from "hardhat";
+import { TestnetToken } from "../../typechain";
 
 export interface MintTestnetTokenArgs {
     tokenAddress: string;
@@ -25,7 +25,6 @@ export const runMintTestnetTokenSetup = async (input: MintTestnetTokenArgs): Pro
 
     for (let i = 0; i < addresses.length; i++) {
         await contract
-            .connect(deployer)
             .mint(addresses[i], ethers.utils.parseUnits(input.amount.toString(), input.decimals));
 
         console.log(`Minted to ${addresses[i]}`);

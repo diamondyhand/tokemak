@@ -25,6 +25,8 @@ import managerGrantRole from "./manager_grant_role";
 
 dotenv.config();
 
+console.log(voteTokenMultiplierSetup);
+
 yargs
     .scriptName("script-cli")
     .strict()

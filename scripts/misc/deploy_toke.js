@@ -1,4 +1,4 @@
-const {ethers} = require("hardhat");
+const { ethers } = require("hardhat");
 
 async function main() {
     //const TREASURY_ADDRESS = "0x8b4334d4812C530574Bd4F2763FcD22dE94A969B";
@@ -11,6 +11,8 @@ async function main() {
     const tokeFactory = await ethers.getContractFactory("Toke");
     const tokeContract = await tokeFactory.deploy();
     await tokeContract.deployed();
+
+    console.log("Toke's address is ", tokeContract.address);
 
     const tokenName = await tokeContract.name();
     const tokenSymbol = await tokeContract.symbol();

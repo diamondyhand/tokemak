@@ -21,12 +21,9 @@ import type { TypedEventFilter, TypedEvent, TypedListener } from "./common";
 
 interface ManagerInterface extends ethers.utils.Interface {
   functions: {
-    "ADD_LIQUIDITY_ROLE()": FunctionFragment;
     "ADMIN_ROLE()": FunctionFragment;
     "DEFAULT_ADMIN_ROLE()": FunctionFragment;
     "MID_CYCLE_ROLE()": FunctionFragment;
-    "MISC_OPERATION_ROLE()": FunctionFragment;
-    "REMOVE_LIQUIDITY_ROLE()": FunctionFragment;
     "ROLLOVER_ROLE()": FunctionFragment;
     "START_ROLLOVER_ROLE()": FunctionFragment;
     "_eventSend()": FunctionFragment;
@@ -69,10 +66,6 @@ interface ManagerInterface extends ethers.utils.Interface {
   };
 
   encodeFunctionData(
-    functionFragment: "ADD_LIQUIDITY_ROLE",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
     functionFragment: "ADMIN_ROLE",
     values?: undefined
   ): string;
@@ -82,14 +75,6 @@ interface ManagerInterface extends ethers.utils.Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "MID_CYCLE_ROLE",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "MISC_OPERATION_ROLE",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "REMOVE_LIQUIDITY_ROLE",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -251,10 +236,6 @@ interface ManagerInterface extends ethers.utils.Interface {
     values: [string]
   ): string;
 
-  decodeFunctionResult(
-    functionFragment: "ADD_LIQUIDITY_ROLE",
-    data: BytesLike
-  ): Result;
   decodeFunctionResult(functionFragment: "ADMIN_ROLE", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "DEFAULT_ADMIN_ROLE",
@@ -262,14 +243,6 @@ interface ManagerInterface extends ethers.utils.Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "MID_CYCLE_ROLE",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "MISC_OPERATION_ROLE",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "REMOVE_LIQUIDITY_ROLE",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -560,17 +533,11 @@ export class Manager extends BaseContract {
   interface: ManagerInterface;
 
   functions: {
-    ADD_LIQUIDITY_ROLE(overrides?: CallOverrides): Promise<[string]>;
-
     ADMIN_ROLE(overrides?: CallOverrides): Promise<[string]>;
 
     DEFAULT_ADMIN_ROLE(overrides?: CallOverrides): Promise<[string]>;
 
     MID_CYCLE_ROLE(overrides?: CallOverrides): Promise<[string]>;
-
-    MISC_OPERATION_ROLE(overrides?: CallOverrides): Promise<[string]>;
-
-    REMOVE_LIQUIDITY_ROLE(overrides?: CallOverrides): Promise<[string]>;
 
     ROLLOVER_ROLE(overrides?: CallOverrides): Promise<[string]>;
 
@@ -737,17 +704,11 @@ export class Manager extends BaseContract {
     ): Promise<ContractTransaction>;
   };
 
-  ADD_LIQUIDITY_ROLE(overrides?: CallOverrides): Promise<string>;
-
   ADMIN_ROLE(overrides?: CallOverrides): Promise<string>;
 
   DEFAULT_ADMIN_ROLE(overrides?: CallOverrides): Promise<string>;
 
   MID_CYCLE_ROLE(overrides?: CallOverrides): Promise<string>;
-
-  MISC_OPERATION_ROLE(overrides?: CallOverrides): Promise<string>;
-
-  REMOVE_LIQUIDITY_ROLE(overrides?: CallOverrides): Promise<string>;
 
   ROLLOVER_ROLE(overrides?: CallOverrides): Promise<string>;
 
@@ -914,17 +875,11 @@ export class Manager extends BaseContract {
   ): Promise<ContractTransaction>;
 
   callStatic: {
-    ADD_LIQUIDITY_ROLE(overrides?: CallOverrides): Promise<string>;
-
     ADMIN_ROLE(overrides?: CallOverrides): Promise<string>;
 
     DEFAULT_ADMIN_ROLE(overrides?: CallOverrides): Promise<string>;
 
     MID_CYCLE_ROLE(overrides?: CallOverrides): Promise<string>;
-
-    MISC_OPERATION_ROLE(overrides?: CallOverrides): Promise<string>;
-
-    REMOVE_LIQUIDITY_ROLE(overrides?: CallOverrides): Promise<string>;
 
     ROLLOVER_ROLE(overrides?: CallOverrides): Promise<string>;
 
@@ -1288,17 +1243,11 @@ export class Manager extends BaseContract {
   };
 
   estimateGas: {
-    ADD_LIQUIDITY_ROLE(overrides?: CallOverrides): Promise<BigNumber>;
-
     ADMIN_ROLE(overrides?: CallOverrides): Promise<BigNumber>;
 
     DEFAULT_ADMIN_ROLE(overrides?: CallOverrides): Promise<BigNumber>;
 
     MID_CYCLE_ROLE(overrides?: CallOverrides): Promise<BigNumber>;
-
-    MISC_OPERATION_ROLE(overrides?: CallOverrides): Promise<BigNumber>;
-
-    REMOVE_LIQUIDITY_ROLE(overrides?: CallOverrides): Promise<BigNumber>;
 
     ROLLOVER_ROLE(overrides?: CallOverrides): Promise<BigNumber>;
 
@@ -1465,10 +1414,6 @@ export class Manager extends BaseContract {
   };
 
   populateTransaction: {
-    ADD_LIQUIDITY_ROLE(
-      overrides?: CallOverrides
-    ): Promise<PopulatedTransaction>;
-
     ADMIN_ROLE(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 
     DEFAULT_ADMIN_ROLE(
@@ -1476,14 +1421,6 @@ export class Manager extends BaseContract {
     ): Promise<PopulatedTransaction>;
 
     MID_CYCLE_ROLE(overrides?: CallOverrides): Promise<PopulatedTransaction>;
-
-    MISC_OPERATION_ROLE(
-      overrides?: CallOverrides
-    ): Promise<PopulatedTransaction>;
-
-    REMOVE_LIQUIDITY_ROLE(
-      overrides?: CallOverrides
-    ): Promise<PopulatedTransaction>;
 
     ROLLOVER_ROLE(overrides?: CallOverrides): Promise<PopulatedTransaction>;
 
