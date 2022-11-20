@@ -39,14 +39,11 @@ async function main() {
         };
     }
     console.log(chalk.greenBright(`Treasury address: ${treasuryPublic}`));
-    console.log("part_1...");
     if (treasuryWrite) {
         treasuryWrite();
     }
-    console.log("part_2...");
     // Deploy Manager
     const managerFactory = await ethers.getContractFactory("Manager");
-    console.log("part_3...", managerContract.address);
 
     const managerContract = await upgrades.deployProxy(
         managerFactory,

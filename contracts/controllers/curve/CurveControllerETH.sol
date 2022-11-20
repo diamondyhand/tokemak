@@ -2,14 +2,14 @@
 
 pragma solidity 0.6.11;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
-import "../../interfaces/curve/IStableSwapPoolETH.sol";
-import "../../interfaces/curve/IRegistry.sol";
-import "../../interfaces/curve/IAddressProvider.sol";
-import "../BaseController.sol";
+import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import '@openzeppelin/contracts/token/ERC20/SafeERC20.sol';
+import '@openzeppelin/contracts/math/SafeMath.sol';
+import '@openzeppelin/contracts/utils/Address.sol';
+import '../../interfaces/curve/IStableSwapPoolETH.sol';
+import '../../interfaces/curve/IRegistry.sol';
+import '../../interfaces/curve/IAddressProvider.sol';
+import '../BaseController.sol';
 
 contract CurveControllerETH is BaseController {
     using SafeERC20 for IERC20;
@@ -27,7 +27,7 @@ contract CurveControllerETH is BaseController {
         address _addressRegistry,
         IAddressProvider _curveAddressProvider
     ) public BaseController(_manager, _accessControl, _addressRegistry) {
-        require(address(_curveAddressProvider) != address(0), "INVALID_CURVE_ADDRESS_PROVIDER");
+        require(address(_curveAddressProvider) != address(0), 'INVALID_CURVE_ADDRESS_PROVIDER');
         addressProvider = _curveAddressProvider;
     }
 
@@ -53,11 +53,11 @@ contract CurveControllerETH is BaseController {
             if (amounts[i] > 0) {
                 address coin = IStableSwapPoolETH(poolAddress).coins(i);
 
-                require(addressRegistry.checkAddress(coin, 0), "INVALID_COIN");
+                require(addressRegistry.checkAddress(coin, 0), 'INVALID_COIN');
 
                 uint256 balance = _getBalance(coin);
 
-                require(balance >= amounts[i], "INSUFFICIENT_BALANCE");
+                require(balance >= amounts[i], 'INSUFFICIENT_BALANCE');
 
                 if (coin != ETH_REGISTRY_ADDRESS) {
                     _approve(IERC20(coin), poolAddress, amounts[i]);
@@ -69,7 +69,7 @@ contract CurveControllerETH is BaseController {
         IStableSwapPoolETH(poolAddress).add_liquidity{value: amounts[0]}(amounts, minMintAmount);
         uint256 lpTokenBalanceAfter = IERC20(lpTokenAddress).balanceOf(address(this));
 
-        require(lpTokenBalanceAfter.sub(lpTokenBalanceBefore) >= minMintAmount, "LP_AMT_TOO_LOW");
+        require(lpTokenBalanceAfter.sub(lpTokenBalanceBefore) >= minMintAmount, 'LP_AMT_TOO_LOW');
     }
 
     /// @notice Withdraw liquidity from Curve pool
@@ -95,7 +95,7 @@ contract CurveControllerETH is BaseController {
 
         _compareCoinsBalances(coinsBalancesBefore, coinsBalancesAfter, amounts);
 
-        require(lpTokenBalanceBefore.sub(lpTokenBalanceAfter) <= maxBurnAmount, "LP_COST_TOO_HIGH");
+        require(lpTokenBalanceBefore.sub(lpTokenBalanceAfter) <= maxBurnAmount, 'LP_COST_TOO_HIGH');
     }
 
     /// @notice Withdraw liquidity from Curve pool
@@ -121,7 +121,7 @@ contract CurveControllerETH is BaseController {
 
         _compareCoinsBalances(coinsBalancesBefore, coinsBalancesAfter, minAmounts);
 
-        require(lpTokenBalanceBefore.sub(amount) == lpTokenBalanceAfter, "LP_TOKEN_AMT_MISMATCH");
+        require(lpTokenBalanceBefore.sub(amount) == lpTokenBalanceAfter, 'LP_TOKEN_AMT_MISMATCH');
     }
 
     /// @notice Withdraw liquidity from Curve pool
@@ -148,12 +148,15 @@ contract CurveControllerETH is BaseController {
         uint256 lpTokenBalanceAfter = IERC20(lpTokenAddress).balanceOf(address(this));
         uint256 coinBalanceAfter = _getBalance(coin);
 
-        require(coinBalanceBefore < coinBalanceAfter, "BALANCE_MUST_INCREASE");
-        require(lpTokenBalanceBefore.sub(tokenAmount) == lpTokenBalanceAfter, "LP_TOKEN_AMT_MISMATCH");
+        require(coinBalanceBefore < coinBalanceAfter, 'BALANCE_MUST_INCREASE');
+        require(
+            lpTokenBalanceBefore.sub(tokenAmount) == lpTokenBalanceAfter,
+            'LP_TOKEN_AMT_MISMATCH'
+        );
     }
 
     function _getLPToken(address poolAddress) internal returns (address) {
-        require(poolAddress != address(0), "INVALID_POOL_ADDRESS");
+        require(poolAddress != address(0), 'INVALID_POOL_ADDRESS');
 
         address registryAddress = addressProvider.get_registry();
         address lpTokenAddress = IRegistry(registryAddress).get_lp_token(poolAddress);
@@ -164,7 +167,7 @@ contract CurveControllerETH is BaseController {
             lpTokenAddress = poolAddress;
         }
 
-        require(addressRegistry.checkAddress(lpTokenAddress, 0), "INVALID_LP_TOKEN");
+        require(addressRegistry.checkAddress(lpTokenAddress, 0), 'INVALID_LP_TOKEN');
 
         return lpTokenAddress;
     }
@@ -179,7 +182,10 @@ contract CurveControllerETH is BaseController {
         return balance;
     }
 
-    function _getCoinsBalances(address poolAddress) internal returns (uint256[N_COINS] memory coinsBalances) {
+    function _getCoinsBalances(address poolAddress)
+        internal
+        returns (uint256[N_COINS] memory coinsBalances)
+    {
         for (uint256 i = 0; i < N_COINS; ++i) {
             address coin = IStableSwapPoolETH(poolAddress).coins(i);
             coinsBalances[i] = _getBalance(coin);
@@ -194,7 +200,7 @@ contract CurveControllerETH is BaseController {
     ) internal pure {
         for (uint256 i = 0; i < N_COINS; ++i) {
             uint256 minAmount = amounts[i];
-            require(balancesAfter[i].sub(balancesBefore[i]) >= minAmount, "INVALID_BALANCE_CHANGE");
+            require(balancesAfter[i].sub(balancesBefore[i]) >= minAmount, 'INVALID_BALANCE_CHANGE');
         }
     }
 
