@@ -2,15 +2,15 @@
 
 pragma solidity 0.6.11;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
-import "../../interfaces/curve/IDepositZap.sol";
-import "../../interfaces/curve/IStableSwapPool.sol";
-import "../../interfaces/curve/IRegistry.sol";
-import "../../interfaces/curve/IAddressProvider.sol";
-import "../BaseController.sol";
+import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import '@openzeppelin/contracts/token/ERC20/SafeERC20.sol';
+import '@openzeppelin/contracts/math/SafeMath.sol';
+import '@openzeppelin/contracts/utils/Address.sol';
+import '../../interfaces/curve/IDepositZap.sol';
+import '../../interfaces/curve/IStableSwapPool.sol';
+import '../../interfaces/curve/IRegistry.sol';
+import '../../interfaces/curve/IAddressProvider.sol';
+import '../BaseController.sol';
 
 contract CurveControllerMetaPool3 is BaseController {
     using SafeERC20 for IERC20;
@@ -35,8 +35,8 @@ contract CurveControllerMetaPool3 is BaseController {
         address _basePoolAddress,
         address _zapAddress
     ) public BaseController(_manager, _accessControl, _addressRegistry) {
-        require(address(_basePoolAddress) != address(0), "INVALID_CURVE_BASE_POOL_ADDRESS");
-        require(address(_zapAddress) != address(0), "INVALID_CURVE_DEPOSIT_ZAP_ADDRESS");
+        require(address(_basePoolAddress) != address(0), 'INVALID_CURVE_BASE_POOL_ADDRESS');
+        require(address(_zapAddress) != address(0), 'INVALID_CURVE_DEPOSIT_ZAP_ADDRESS');
         basePoolAddress = _basePoolAddress;
         zapAddress = _zapAddress;
     }
@@ -79,7 +79,7 @@ contract CurveControllerMetaPool3 is BaseController {
         IDepositZap(zapAddress).add_liquidity(metaPoolAddress, amounts, minMintAmount);
         uint256 lpTokenBalanceAfter = IERC20(lpTokenAddress).balanceOf(address(this));
 
-        require(lpTokenBalanceAfter.sub(lpTokenBalanceBefore) >= minMintAmount, "LP_AMT_TOO_LOW");
+        require(lpTokenBalanceAfter.sub(lpTokenBalanceBefore) >= minMintAmount, 'LP_AMT_TOO_LOW');
     }
 
     /// @notice Withdraw liquidity from Curve pool
@@ -105,7 +105,7 @@ contract CurveControllerMetaPool3 is BaseController {
 
         _compareCoinsBalances(coinsBalancesBefore, coinsBalancesAfter, amounts);
 
-        require(lpTokenBalanceBefore.sub(lpTokenBalanceAfter) <= maxBurnAmount, "LP_COST_TOO_HIGH");
+        require(lpTokenBalanceBefore.sub(lpTokenBalanceAfter) <= maxBurnAmount, 'LP_COST_TOO_HIGH');
     }
 
     /// @notice Withdraw liquidity from Curve pool
@@ -131,18 +131,21 @@ contract CurveControllerMetaPool3 is BaseController {
 
         _compareCoinsBalances(coinsBalancesBefore, coinsBalancesAfter, minAmounts);
 
-        require(lpTokenBalanceBefore.sub(amount) == lpTokenBalanceAfter, "LP_TOKEN_AMT_MISMATCH");
+        require(lpTokenBalanceBefore.sub(amount) == lpTokenBalanceAfter, 'LP_TOKEN_AMT_MISMATCH');
     }
 
     function _validateCoin(address coin, uint256 amount) internal {
-        require(addressRegistry.checkAddress(coin, 0), "INVALID_COIN");
+        require(addressRegistry.checkAddress(coin, 0), 'INVALID_COIN');
 
         uint256 balance = IERC20(coin).balanceOf(address(this));
 
-        require(balance >= amount, "INSUFFICIENT_BALANCE");
+        require(balance >= amount, 'INSUFFICIENT_BALANCE');
     }
 
-    function _getCoinsBalances(address metaPoolAddress) internal returns (uint256[N_COINS] memory coinsBalances) {
+    function _getCoinsBalances(address metaPoolAddress)
+        internal
+        returns (uint256[N_COINS] memory coinsBalances)
+    {
         // Coin from meta pool
         address firstCoin = IStableSwapPool(metaPoolAddress).coins(0);
         coinsBalances[0] = IERC20(firstCoin).balanceOf(address(this));
@@ -163,11 +166,14 @@ contract CurveControllerMetaPool3 is BaseController {
     ) internal pure {
         for (uint256 i = 0; i < N_COINS; ++i) {
             uint256 minAmount = amounts[i];
-            require(balancesAfter[i].sub(balancesBefore[i]) >= minAmount, "INVALID_BALANCE_CHANGE");
+            require(balancesAfter[i].sub(balancesBefore[i]) >= minAmount, 'INVALID_BALANCE_CHANGE');
         }
     }
 
-    function _getLPTokenAndApprove(address metaPoolAddress, uint256 amount) internal returns (address) {
+    function _getLPTokenAndApprove(address metaPoolAddress, uint256 amount)
+        internal
+        returns (address)
+    {
         // Meta pool is an ERC20 LP token of that pool at the same time
         address lpTokenAddress = metaPoolAddress;
 
